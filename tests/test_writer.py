@@ -81,7 +81,71 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
-    for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest)]:
+
+    async def scope_check(issue, test_code):
+        return writer.Scope(faithful=True, reason="ok")
+
+    for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
+                     ("scope_check", scope_check)]:
         monkeypatch.setattr(writer, name, fn)
     out = asyncio.run(writer.write_test("issue", object()))
     assert out.test_code == "def test_bug(): assert 1 == 2" and out.attempts == 1 and Backend.closed
+
+
+def test_keep_tests_drops_tests_that_passed_on_base():
+    code = ("import x\n\n\ndef helper():\n    return 1\n\n\ndef test_bug():\n    assert 0\n\n\n"
+            "def test_guard():\n    assert 1\n\n\ndef test_param(v):\n    assert 0\n")
+    kept = writer.keep_tests(code, ["receipts_test.py::test_bug", "receipts_test.py::test_param[a]"])
+    assert "def test_bug" in kept and "def test_param" in kept and "def helper" in kept and "import x" in kept
+    assert "test_guard" not in kept
+
+
+def _fake_writer_run(monkeypatch, code, results, scope):
+    class Agent:
+        async def ainvoke(self, *a, **k):
+            return None  # agent stops without submitting; the leftover file gets submitted
+
+    class Backend:
+        async def adownload_files(self, paths):
+            return [SimpleNamespace(error=None, content=code.encode())]
+
+        async def aclose(self):
+            pass
+
+    async def backend(image, log):
+        return Backend()
+
+    async def blind(image):
+        return image
+
+    async def run_pytest(image, args, files):
+        return PytestRun({k: TestResult(*v) for k, v in results.items()})
+
+    async def scope_check(issue, test_code):
+        scope.seen = test_code
+        return writer.Scope(faithful=scope.faithful, reason="adds POST expectations")
+
+    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
+    monkeypatch.setattr(writer.config, "llm", lambda role: None)
+    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
+    for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
+                     ("scope_check", scope_check)]:
+        monkeypatch.setattr(writer, name, fn)
+    return asyncio.run(writer.write_test("issue", object()))
+
+
+CODE = "def test_bug():\n    assert 1 == 2\n\n\ndef test_guard():\n    assert True\n"
+RESULTS = {"receipts_test.py::test_bug": ("failed", "AssertionError", "assert 1 == 2"),
+           "receipts_test.py::test_guard": ("passed",)}
+
+
+def test_accepted_test_has_guards_dropped_and_passed_scope_check(monkeypatch):
+    scope = SimpleNamespace(faithful=True)
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, scope)
+    assert out.test_code is not None and "test_guard" not in out.test_code
+    assert "test_guard" not in scope.seen  # the reviewer judges only the reproducing tests
+
+
+def test_out_of_scope_test_is_rejected(monkeypatch):
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=False))
+    assert out.test_code is None and "beyond the issue" in out.reason

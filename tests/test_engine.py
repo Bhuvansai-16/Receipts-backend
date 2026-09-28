@@ -66,3 +66,13 @@ def test_noop_patch_is_refuted_after_second_opinion():
 def test_claim_prompt_omits_empty_file_list():
     assert "Files changed" not in engine.claim_prompt("issue", "")
     assert "m.py" in engine.claim_prompt("issue", PATCH)
+
+
+def test_majority_vote_picks_most_common_kind():
+    fix, none = engine.Claim(kind="fix", claim="a"), engine.Claim(kind="none", claim="b")
+    assert engine.majority([fix, none, fix]).kind == "fix"
+    assert engine.majority([none, none, fix]).kind == "none"
+
+
+def test_claim_prompt_counts_reported_wrong_behaviour_as_fix():
+    assert "even if the issue also suggests an option" in engine.claim_prompt("issue", "")

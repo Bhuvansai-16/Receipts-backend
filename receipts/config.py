@@ -16,6 +16,7 @@ NEBIUS_BASE_URL = os.environ.get("NEBIUS_BASE_URL", "https://api.tokenfactory.ne
 MODELS = {
     "classifier": os.environ.get("MODEL_CLASSIFIER", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),
     "writer": os.environ.get("MODEL_TEST_WRITER", "nvidia/Nemotron-3_5-Lightning"),
+    "scope": os.environ.get("MODEL_SCOPE", "nvidia/nemotron-3-super-120b-a12b"),
     "judge": os.environ.get("MODEL_JUDGE", "nvidia/Nemotron-3-Ultra-550b-a55b"),
 }
 SANDBOX_PROVIDER = os.environ.get("SANDBOX_PROVIDER", "contree").lower()  # contree | daytona (stopgap)

@@ -55,4 +55,5 @@ Evidence JSON lands in `runs/`. Traces in LangSmith project `receipts`.
 |---|---|
 | Claim classification | Nemotron 3 Nano |
 | Blind test writing (Deepagents agent in sandbox) | Nemotron 3.5 Lightning |
+| Scope check of each submitted test (only what the issue asks) | Nemotron 3 Super |
 | Second opinion before REFUTED | Nemotron 3 Ultra |

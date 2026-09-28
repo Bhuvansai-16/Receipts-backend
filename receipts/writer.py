@@ -3,6 +3,7 @@
 Integrity rule D2: the agent sees the issue and the unpatched repo only, never the PR's patch.
 Acceptance is decided by code (repro_check on a clean fork), not by the agent.
 """
+import ast
 from dataclasses import dataclass, field
 
 from contree_sdk.langchain.sandbox import ContreeSandbox
@@ -10,6 +11,8 @@ from deepagents import create_deep_agent
 from deepagents.backends.protocol import ExecuteResponse
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
+from langsmith import traceable
+from pydantic import BaseModel
 
 from . import config, sandbox
 from .sandbox import ACTIVATE, ENV, TEST_ARGS, TEST_PATH, run_pytest, text
@@ -38,7 +41,10 @@ Rules:
 - Do not edit repository files. Create only {TEST_PATH}.
 - Tests must assert the behaviour the issue says is CORRECT, so they FAIL on the current code with an
   AssertionError (use plain `assert`). Import errors, other exceptions, or skips do not count.
-- Keep it small: 1-3 focused test functions, no network access, no new dependencies.
+- Test ONLY what the issue describes, the way it describes it: prefer the issue's own example, API and inputs.
+  No extra cases, other methods/verbs, or stricter checks the issue doesn't ask for; a reviewer rejects
+  tests that go beyond the issue.
+- Keep it small: 1-2 focused test functions, no network access, no new dependencies.
 - Stop as soon as submit_test answers ACCEPTED.
 - docs_search is for library/API documentation only.
 """
@@ -67,6 +73,36 @@ class SafeSandbox(ContreeSandbox):
                 self._session = type(self._session)(self._session)  # restart from the last good snapshot
                 out = ExecuteResponse(output=f"sandbox error: {type(e).__name__}: {e}", exit_code=1)
         return sandbox.record(self.log, command, out)
+
+
+class Scope(BaseModel):
+    faithful: bool
+    reason: str
+
+
+@traceable(name="scope_check")
+async def scope_check(issue: str, test_code: str) -> Scope:
+    """Blind review (issue + test only): does every test assert just what the issue asks?"""
+    prompt = (
+        "A pytest file was written from the bug report below to reproduce it. Answer faithful=true only if every "
+        "test asserts behaviour the report says is wrong, with expectations the report states or clearly implies. "
+        "Answer false if any test adds other cases, methods, inputs or expectations the report doesn't ask for, "
+        "and name that test in the reason.\n\n"
+        f"Bug report:\n{issue[:8000]}\n\nTests:\n```python\n{test_code}\n```"
+    )
+    return await config.llm("scope").with_structured_output(Scope, method="function_calling").ainvoke(prompt)
+
+
+def keep_tests(code: str, nodeids: list[str]) -> str:
+    """Drop top-level test functions not in `nodeids` (tests that passed on base); keep everything else."""
+    keep = {n.split("::")[-1].split("[")[0] for n in nodeids}
+    lines = code.splitlines(keepends=True)
+    drop = [n for n in ast.parse(code).body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name.startswith("test") and n.name not in keep]
+    for node in sorted(drop, key=lambda n: n.lineno, reverse=True):
+        start = (node.decorator_list[0].lineno if node.decorator_list else node.lineno) - 1
+        del lines[start:node.end_lineno]
+    return "".join(lines)
 
 
 async def agent_backend(image, log: list):
@@ -120,10 +156,21 @@ async def write_test(issue: str, base_image) -> WriterResult:
         code = text(dl.content)
         run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: code.encode()})
         ok, out.reason = repro_check(run)
-        if ok:
-            out.test_code, out.base_run = code, run
-            return "ACCEPTED. Stop now."
-        return f"REJECTED: {out.reason}\n--- pytest output (tail) ---\n{run.output[-2500:]}"
+        if not ok:
+            return f"REJECTED: {out.reason}\n--- pytest output (tail) ---\n{run.output[-2500:]}"
+        trimmed = keep_tests(code, [n for n, r in run.results.items() if r.outcome != "passed"])
+        if trimmed != code:  # guard tests dropped: what remains must still reproduce on its own
+            run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: trimmed.encode()})
+            ok, out.reason = repro_check(run)
+            if not ok:
+                return f"REJECTED: after dropping tests that pass on the unpatched code: {out.reason}"
+            code = trimmed
+        scope = await scope_check(issue, code)
+        if not scope.faithful:
+            out.reason = f"test goes beyond the issue: {scope.reason}"
+            return f"REJECTED: {out.reason}\nKeep only assertions the issue asks for, then submit again."
+        out.test_code, out.base_run = code, run
+        return "ACCEPTED. Stop now."
 
     agent = create_deep_agent(model=config.llm("writer"), tools=[docs_search, submit_test],
                               system_prompt=PROMPT, backend=backend)

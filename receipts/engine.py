@@ -2,6 +2,7 @@
 import asyncio
 import re
 import time
+from collections import Counter
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Literal
@@ -34,16 +35,26 @@ def changed_files(patch: str) -> list[str]:
 def claim_prompt(issue: str, patch: str) -> str:
     files = changed_files(patch)
     return (
-        "Classify this pull request's claim. fix = claims to fix a bug; dependency = only bumps a dependency "
-        "version; none = feature, docs, style or refactor.\n\n"
+        "Classify this pull request's claim.\n"
+        "fix = the linked issue reports behaviour as wrong, broken or unwanted and the PR claims to change it "
+        "(even if the issue also suggests an option or alternative);\n"
+        "dependency = the PR only bumps a dependency version;\n"
+        "none = new feature, docs, style or refactor, with nothing reported as wrong.\n\n"
         f"Linked issue:\n{issue[:6000]}" + (f"\n\nFiles changed: {', '.join(files)}" if files else "")
     )
 
 
+def majority(votes: list[Claim]) -> Claim:
+    """Most common kind wins; a three-way tie goes to the first vote."""
+    kind = Counter(v.kind for v in votes).most_common(1)[0][0]
+    return next(v for v in votes if v.kind == kind)
+
+
 @traceable(name="classify_claim")
 async def classify(issue: str, patch: str) -> Claim:
+    # A single Nano answer once labelled a real bug fix "none", which silently skips the check: vote of 3.
     llm = config.llm("classifier").with_structured_output(Claim, method="function_calling")
-    return await llm.ainvoke(claim_prompt(issue, patch))
+    return majority(list(await asyncio.gather(*(llm.ainvoke(claim_prompt(issue, patch)) for _ in range(3)))))
 
 
 @traceable(name="second_opinion")
