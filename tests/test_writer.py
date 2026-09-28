@@ -83,7 +83,7 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
 
     async def scope_check(issue, test_code):
-        return writer.Scope(faithful=True, reason="ok")
+        return writer.Scope(faithful_tests=["test_bug"], reason="ok")
 
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
                      ("scope_check", scope_check)]:
@@ -94,10 +94,11 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
 
 def test_keep_tests_drops_tests_that_passed_on_base():
     code = ("import x\n\n\ndef helper():\n    return 1\n\n\ndef test_bug():\n    assert 0\n\n\n"
-            "def test_guard():\n    assert 1\n\n\ndef test_param(v):\n    assert 0\n")
+            "def test_guard():\n    assert 1\n\n\ndef test_param(v):\n    assert 0\n\n\n"
+            "if __name__ == '__main__':\n    test_guard()\n")
     kept = writer.keep_tests(code, ["receipts_test.py::test_bug", "receipts_test.py::test_param[a]"])
     assert "def test_bug" in kept and "def test_param" in kept and "def helper" in kept and "import x" in kept
-    assert "test_guard" not in kept
+    assert "test_guard" not in kept and "__main__" not in kept  # runner block would call dropped tests
 
 
 def _fake_writer_run(monkeypatch, code, results, scope):
@@ -123,7 +124,7 @@ def _fake_writer_run(monkeypatch, code, results, scope):
 
     async def scope_check(issue, test_code):
         scope.seen = test_code
-        return writer.Scope(faithful=scope.faithful, reason="adds POST expectations")
+        return writer.Scope(faithful_tests=scope.faithful, reason="test_extra adds POST expectations")
 
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
@@ -134,18 +135,21 @@ def _fake_writer_run(monkeypatch, code, results, scope):
     return asyncio.run(writer.write_test("issue", object()))
 
 
-CODE = "def test_bug():\n    assert 1 == 2\n\n\ndef test_guard():\n    assert True\n"
+CODE = ("def test_bug():\n    assert 1 == 2\n\n\ndef test_extra():\n    assert 3 == 4\n\n\n"
+        "def test_guard():\n    assert True\n")
 RESULTS = {"receipts_test.py::test_bug": ("failed", "AssertionError", "assert 1 == 2"),
+           "receipts_test.py::test_extra": ("failed", "AssertionError", "assert 3 == 4"),
            "receipts_test.py::test_guard": ("passed",)}
 
 
-def test_accepted_test_has_guards_dropped_and_passed_scope_check(monkeypatch):
-    scope = SimpleNamespace(faithful=True)
+def test_scope_check_keeps_only_faithful_failing_tests(monkeypatch):
+    scope = SimpleNamespace(faithful=["test_bug"])
     out = _fake_writer_run(monkeypatch, CODE, RESULTS, scope)
-    assert out.test_code is not None and "test_guard" not in out.test_code
-    assert "test_guard" not in scope.seen  # the reviewer judges only the reproducing tests
+    assert out.test_code is not None and "def test_bug" in out.test_code
+    assert "test_extra" not in out.test_code and "test_guard" not in out.test_code
+    assert "test_guard" not in scope.seen  # the reviewer only sees tests that reproduce the bug
 
 
-def test_out_of_scope_test_is_rejected(monkeypatch):
-    out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=False))
-    assert out.test_code is None and "beyond the issue" in out.reason
+def test_rejected_when_no_test_sticks_to_the_issue(monkeypatch):
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=[]))
+    assert out.test_code is None and "sticks to the issue" in out.reason

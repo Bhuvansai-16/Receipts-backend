@@ -76,31 +76,39 @@ class SafeSandbox(ContreeSandbox):
 
 
 class Scope(BaseModel):
-    faithful: bool
+    faithful_tests: list[str]
     reason: str
 
 
 @traceable(name="scope_check")
 async def scope_check(issue: str, test_code: str) -> Scope:
-    """Blind review (issue + test only): does every test assert just what the issue asks?"""
+    """Blind review (issue + tests only): which tests assert just what the issue asks?"""
     prompt = (
-        "A pytest file was written from the bug report below to reproduce it. Answer faithful=true only if every "
-        "test asserts behaviour the report says is wrong, with expectations the report states or clearly implies. "
-        "Answer false if any test adds other cases, methods, inputs or expectations the report doesn't ask for, "
-        "and name that test in the reason.\n\n"
+        "The pytest tests below were written from the bug report below, and each fails on the current code. "
+        "List in faithful_tests the names of the tests that assert only behaviour the report says is wrong, with "
+        "expectations the report states or clearly implies, and that have no mistakes of their own (for example a "
+        "name or docstring claiming something the test doesn't do). Leave out any test that adds other cases, "
+        "methods, inputs or expectations the report doesn't ask for, and say in reason what you left out and why.\n\n"
         f"Bug report:\n{issue[:8000]}\n\nTests:\n```python\n{test_code}\n```"
     )
     return await config.llm("scope").with_structured_output(Scope, method="function_calling").ainvoke(prompt)
 
 
+def _test_name(nodeid: str) -> str:
+    return nodeid.split("::")[-1].split("[")[0]
+
+
 def keep_tests(code: str, nodeids: list[str]) -> str:
-    """Drop top-level test functions not in `nodeids` (tests that passed on base); keep everything else."""
-    keep = {n.split("::")[-1].split("[")[0] for n in nodeids}
+    """Keep only the listed top-level tests (plus imports/helpers); drop the others and any __main__ runner."""
+    keep = {_test_name(n) for n in nodeids}
     lines = code.splitlines(keepends=True)
-    drop = [n for n in ast.parse(code).body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and n.name.startswith("test") and n.name not in keep]
+    drop = [n for n in ast.parse(code).body
+            if (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test")
+                and n.name not in keep)
+            or (isinstance(n, ast.If) and "__main__" in ast.unparse(n.test))]
     for node in sorted(drop, key=lambda n: n.lineno, reverse=True):
-        start = (node.decorator_list[0].lineno if node.decorator_list else node.lineno) - 1
+        decorators = getattr(node, "decorator_list", [])
+        start = (decorators[0].lineno if decorators else node.lineno) - 1
         del lines[start:node.end_lineno]
     return "".join(lines)
 
@@ -128,6 +136,7 @@ class WriterResult:
     reason: str = "writer never submitted a test"
     queries: list[str] = field(default_factory=list)
     log: list[dict] = field(default_factory=list)
+    scope: str = ""  # what the scope check pruned and why
 
 
 async def write_test(issue: str, base_image) -> WriterResult:
@@ -158,18 +167,22 @@ async def write_test(issue: str, base_image) -> WriterResult:
         ok, out.reason = repro_check(run)
         if not ok:
             return f"REJECTED: {out.reason}\n--- pytest output (tail) ---\n{run.output[-2500:]}"
-        trimmed = keep_tests(code, [n for n, r in run.results.items() if r.outcome != "passed"])
-        if trimmed != code:  # guard tests dropped: what remains must still reproduce on its own
+        # Keep only tests that reproduce the bug AND stick to the issue; prune the rest ourselves instead of
+        # sending the agent round again (it tends to run out of budget before resubmitting).
+        failing = [n for n, r in run.results.items() if r.outcome != "passed"]
+        reproducing = keep_tests(code, failing)
+        scope = await scope_check(issue, reproducing)
+        faithful = [n for n in failing if _test_name(n) in set(scope.faithful_tests)]
+        if not faithful:
+            out.reason = f"no test sticks to the issue: {scope.reason}"
+            return f"REJECTED: {out.reason}\nAssert only what the issue asks for, then submit again."
+        trimmed = keep_tests(code, faithful)
+        if trimmed != code:  # re-verify what remains reproduces on its own
             run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: trimmed.encode()})
             ok, out.reason = repro_check(run)
             if not ok:
-                return f"REJECTED: after dropping tests that pass on the unpatched code: {out.reason}"
-            code = trimmed
-        scope = await scope_check(issue, code)
-        if not scope.faithful:
-            out.reason = f"test goes beyond the issue: {scope.reason}"
-            return f"REJECTED: {out.reason}\nKeep only assertions the issue asks for, then submit again."
-        out.test_code, out.base_run = code, run
+                return f"REJECTED: after keeping only {', '.join(faithful)}: {out.reason}"
+        out.test_code, out.base_run, out.scope = trimmed, run, scope.reason
         return "ACCEPTED. Stop now."
 
     agent = create_deep_agent(model=config.llm("writer"), tools=[docs_search, submit_test],

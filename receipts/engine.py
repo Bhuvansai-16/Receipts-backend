@@ -103,7 +103,7 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict) -> tuple[Verdic
     base = await base_image(inst.instance_id)
     w = await write_test(inst.problem_statement, base)
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
-                    "test_code": w.test_code, "tool_log": w.log}
+                    "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log}
     if w.test_code is None:
         return Verdict.UNPROVEN, f"no valid reproducing test after {w.attempts} attempt(s): {w.reason}"
 
