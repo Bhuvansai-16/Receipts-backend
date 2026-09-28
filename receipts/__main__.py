@@ -39,9 +39,28 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("smoke", help="check models, sandbox, and optionally one SWE-bench image")
     s.add_argument("--instance")
+    r = sub.add_parser("run", help="check one SWE-bench Verified instance")
+    r.add_argument("instance_id")
+    r.add_argument("--patch", default="gold", help="gold | none | path to a .diff file")
     a = ap.parse_args()
     if a.cmd == "smoke":
-        asyncio.run(smoke(a.instance))
+        return asyncio.run(smoke(a.instance))
+
+    from .engine import check
+    from .swebench import load_instance
+
+    try:
+        inst = load_instance(a.instance_id)
+    except ValueError as e:
+        sys.exit(f"error: {e}")
+    patch = {"gold": inst.gold_patch, "none": None}[a.patch] if a.patch in ("gold", "none") else Path(a.patch).read_text()
+    label = a.patch if a.patch in ("gold", "none") else Path(a.patch).stem
+    ev = asyncio.run(check(inst, patch))
+    config.RUNS_DIR.mkdir(exist_ok=True)
+    out = config.RUNS_DIR / f"{inst.instance_id}-{label}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out.write_text(json.dumps(ev, indent=2, default=str), encoding="utf-8")
+    tokens = sum(u.get("total_tokens", 0) for u in (ev.get("tokens") or {}).values())
+    print(f"\n{ev['verdict']}: {ev['reason']}\n  {ev['seconds']}s, {tokens} tokens\n  evidence: {out}")
 
 
 if __name__ == "__main__":
