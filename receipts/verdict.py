@@ -26,7 +26,7 @@ class Verdict(str, Enum):
     NO_CHECKABLE_CLAIM = "NO_CHECKABLE_CLAIM"
 
 
-_ADDR = re.compile(r"0x[0-9a-fA-F]+")
+_ADDR = re.compile(r"0x[0-9a-fA-F]{6,}")  # object addresses only; short hex like '0x1f' is real data
 
 
 def _signature(r: TestResult) -> str:
@@ -54,23 +54,32 @@ def repro_check(run: PytestRun) -> tuple[bool, str]:
     return True, "fails on unpatched code with AssertionError"
 
 
+def _passed(run: PytestRun, nodeid: str) -> bool:
+    return run.results.get(nodeid, TestResult("missing")).outcome == "passed"
+
+
+def restrict(run: PytestRun, ids: list[str]) -> PytestRun:
+    """Keep only the listed test ids (e.g. PASS_TO_PASS out of a file-level run)."""
+    keep = set(ids)
+    return PytestRun({n: r for n, r in run.results.items() if n in keep}, run.output)
+
+
 def suite_candidates(base_suite: PytestRun, pr_suite: PytestRun) -> list[str]:
     """Existing tests that passed on base but not in this PR run."""
-    return sorted(
-        n for n, r in base_suite.results.items()
-        if r.outcome == "passed" and pr_suite.results.get(n, TestResult("missing")).outcome != "passed"
-    )
+    return sorted(n for n in base_suite.results if _passed(base_suite, n) and not _passed(pr_suite, n))
 
 
 def fix_verdict(
     base_runs: list[PytestRun],
     pr_runs: list[PytestRun] | None,
-    base_suite: PytestRun | None,
+    base_suites: list[PytestRun] | None,
     pr_suites: list[PytestRun] | None,
 ) -> tuple[Verdict, str]:
-    """pr_runs None = patch did not apply. base_suite None = no existing tests to check.
+    """pr_runs None = patch did not apply. base_suites None = no existing tests to check.
 
-    pr_suites[0] is the full suite on the PR; later entries are reruns of suite_candidates().
+    base_suites / pr_suites: [full suite run, *reruns of suite_candidates()] on base / PR. Reruns happen on
+    both sides at the same time, so an outage (network, flake) after the first base run can't look like a
+    regression: a test counts as broken only if it passes in every base run and fails in every PR run.
     """
     for i, run in enumerate(base_runs, 1):
         ok, why = repro_check(run)
@@ -81,12 +90,15 @@ def fix_verdict(
     if pr_runs is None:
         return Verdict.UNPROVEN, "patch does not apply to the base commit"
 
+    repro = _failing(base_runs[0]).keys()
     if all(_all_passed(r) for r in pr_runs):
-        if base_suite is not None:
-            if not base_suite.results or any(not s.results for s in pr_suites):
+        if not all(repro <= r.results.keys() for r in pr_runs):
+            return Verdict.UNPROVEN, "the blind test did not run on the PR (deselected or not collected)"
+        if base_suites is not None:
+            if any(not s.results for s in base_suites + pr_suites):
                 return Verdict.UNPROVEN, "existing test suite could not run"
-            broken = [n for n in suite_candidates(base_suite, pr_suites[0])
-                      if all(s.results.get(n, TestResult("missing")).outcome != "passed" for s in pr_suites)]
+            broken = [n for n in suite_candidates(base_suites[0], pr_suites[0])
+                      if all(_passed(s, n) for s in base_suites) and not any(_passed(s, n) for s in pr_suites)]
             if broken:
                 return Verdict.REGRESSION, f"fixes the claim but breaks {len(broken)} existing test(s): {', '.join(broken[:10])}"
         return Verdict.PROVEN, f"test fails on base and passes on the PR in {len(pr_runs)}/{len(pr_runs)} runs; existing tests hold"

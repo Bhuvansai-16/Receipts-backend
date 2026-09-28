@@ -1,0 +1,68 @@
+import asyncio
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from receipts import engine
+from receipts.sandbox import MARKER, TEST_ARGS
+from receipts.swebench import Instance
+
+P2P = ["t.py::a", "t.py::b"]
+PATCH = "diff --git a/m.py b/m.py\n"
+INST = Instance("x__y-1", "psf/requests", "issue", PATCH, P2P)
+PASSED = {"outcome": "passed", "exc": None, "msg": ""}
+
+
+class Img:
+    """Fake Contree image: base fails the blind test, PR passes it; every suite test passes."""
+
+    def __init__(self, name):
+        self.name, self.exit_code = name, 0
+
+    async def run(self, shell=None, files=None, **kw):
+        if "/tmp/pr.diff" in (files or {}):
+            return Img("pr")
+        args = json.loads(files["/tmp/receipts_args.json"])
+        if args == TEST_ARGS:
+            res = {"receipts_test.py::test_bug": PASSED if self.name == "pr"
+                   else {"outcome": "failed", "exc": "AssertionError", "msg": "assert 1 == 2"}}
+        else:  # file-level run: includes a test that is not in PASS_TO_PASS
+            res = {i: PASSED for i in P2P + ["t.py::extra"] if i.split("::")[0] in args}
+        return SimpleNamespace(stdout=MARKER + json.dumps(res), stderr="", exit_code=0)
+
+
+@pytest.fixture(autouse=True)
+def fakes(monkeypatch):
+    async def classify(issue, patch):
+        return engine.Claim(kind="fix", claim="c")
+
+    async def swe_image(sdk, iid):
+        return Img("base")
+
+    async def write_test(issue, img):
+        return SimpleNamespace(test_code="def test_bug(): assert 1 == 2", attempts=1, reason="ok", queries=[], log=[])
+
+    async def judge(*a):
+        return engine.Judgement(faithful=True, reason="matches issue")
+
+    for name, fn in [("classify", classify), ("swe_image", swe_image), ("write_test", write_test), ("judge", judge)]:
+        monkeypatch.setattr(engine, name, fn)
+    monkeypatch.setattr(engine.config, "contree", lambda: None)
+
+
+def test_gold_patch_is_proven_and_suite_is_restricted_to_pass_to_pass():
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "PROVEN", ev["reason"]
+    assert ev["forks"]["base_suite"][0]["tests"] == 2
+
+
+def test_noop_patch_is_refuted_after_second_opinion():
+    ev = asyncio.run(engine.check(INST, None))
+    assert ev["verdict"] == "REFUTED", ev["reason"]
+    assert ev["second_opinion"]["faithful"] is True
+
+
+def test_claim_prompt_omits_empty_file_list():
+    assert "Files changed" not in engine.claim_prompt("issue", "")
+    assert "m.py" in engine.claim_prompt("issue", PATCH)

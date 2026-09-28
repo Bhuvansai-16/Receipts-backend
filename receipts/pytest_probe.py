@@ -43,5 +43,6 @@ def pytest_sessionfinish(session):
 if __name__ == "__main__":  # sandbox entrypoint: targets come from a JSON file to dodge shell quoting
     import sys
 
-    targets = json.load(open("/tmp/receipts_args.json"))
-    sys.exit(pytest.main(targets + ["-p", "pytest_probe", "-p", "no:cacheprovider", "-q"]))
+    targets = json.load(open(os.environ.get("RECEIPTS_ARGS", "/tmp/receipts_args.json")))
+    sys.exit(pytest.main(targets + ["-p", "pytest_probe", "-p", "no:cacheprovider", "-q",
+                                    "--continue-on-collection-errors"]))

@@ -33,6 +33,15 @@ Evidence JSON lands in `runs/`. Traces in LangSmith project `receipts`.
 | UNPROVEN | Anything else. Explicitly not evidence against the PR |
 | NO_CHECKABLE_CLAIM | Not a bug-fix claim |
 
+## Blindness: what is and isn't guaranteed
+
+- The test writer never receives the patch, SWE-bench's hidden tests (`test_patch`, `FAIL_TO_PASS`) or hints.
+- It works in its own sandbox copy with `.git` removed; every verdict run forks the untouched base image.
+- Tavily is limited to documentation sites, with code hosts excluded.
+- Residual risk: the sandbox has network access and docs sites can show newer source. Every shell command
+  and search the agent ran is recorded in the evidence JSON (`writer.tool_log`, `writer.docs_queries`) so a
+  leak can be audited.
+
 ## Models
 
 | Step | Model |

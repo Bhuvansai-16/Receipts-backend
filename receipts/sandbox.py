@@ -8,7 +8,8 @@ from .verdict import PytestRun, TestResult
 
 PROBE_SRC = (Path(__file__).parent / "pytest_probe.py").read_bytes()
 MARKER = "__RECEIPTS_JSON__"
-ACTIVATE = "cd /testbed && . /opt/miniconda3/bin/activate testbed"
+# Works under dash (/bin/sh on Ubuntu): `. bin/activate testbed` would drop the argument there.
+ACTIVATE = "cd /testbed && . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed"
 TEST_PATH = "/testbed/receipts_test.py"
 TEST_ARGS = ["receipts_test.py"]
 _sem: asyncio.Semaphore | None = None
@@ -23,6 +24,11 @@ def _limit() -> asyncio.Semaphore:
 
 def text(x) -> str:
     return x.decode("utf-8", "replace") if isinstance(x, (bytes, bytearray)) else (x or "")
+
+
+def suite_files(test_ids: list[str]) -> list[str]:
+    """Test files behind nodeids. Running by file survives ids that don't exist at base."""
+    return sorted({t.split("::")[0] for t in test_ids})
 
 
 def parse_probe_output(stdout: str, stderr: str = "") -> PytestRun:
@@ -59,8 +65,11 @@ async def run_pytest(image, args: list[str], files: dict[str, bytes] | None = No
 
 
 async def apply_patch(image, patch: str):
-    """New image with `patch` applied at /testbed, or None if it does not apply."""
-    cmd = "cd /testbed && (git apply -v /tmp/pr.diff || patch --batch --fuzz=5 -p1 -i /tmp/pr.diff)"
+    """New image with `patch` applied at /testbed, or None if it does not apply.
+
+    No fuzzy fallback: a misplaced hunk would put code the author never wrote under a verdict.
+    """
+    cmd = "cd /testbed && git apply -v /tmp/pr.diff"
     async with _limit():
         r = await image.run(shell=cmd, files={"/tmp/pr.diff": patch.encode()}, disposable=False,
                             timeout=config.SANDBOX_TIMEOUT_S)

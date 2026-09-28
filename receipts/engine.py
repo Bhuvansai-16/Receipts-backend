@@ -11,9 +11,9 @@ from langsmith import traceable
 from pydantic import BaseModel
 
 from . import config
-from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest
+from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
 from .swebench import Instance, swe_image
-from .verdict import PytestRun, Verdict, fix_verdict, suite_candidates
+from .verdict import PytestRun, Verdict, fix_verdict, restrict, suite_candidates
 from .writer import write_test
 
 
@@ -31,14 +31,19 @@ def changed_files(patch: str) -> list[str]:
     return re.findall(r"^diff --git a/(\S+)", patch, flags=re.M)
 
 
-@traceable(name="classify_claim")
-async def classify(issue: str, patch: str) -> Claim:
-    prompt = (
+def claim_prompt(issue: str, patch: str) -> str:
+    files = changed_files(patch)
+    return (
         "Classify this pull request's claim. fix = claims to fix a bug; dependency = only bumps a dependency "
         "version; none = feature, docs, style or refactor.\n\n"
-        f"Linked issue:\n{issue[:6000]}\n\nFiles changed: {', '.join(changed_files(patch)) or '(none)'}"
+        f"Linked issue:\n{issue[:6000]}" + (f"\n\nFiles changed: {', '.join(files)}" if files else "")
     )
-    return await config.llm("classifier").with_structured_output(Claim, method="function_calling").ainvoke(prompt)
+
+
+@traceable(name="classify_claim")
+async def classify(issue: str, patch: str) -> Claim:
+    llm = config.llm("classifier").with_structured_output(Claim, method="function_calling")
+    return await llm.ainvoke(claim_prompt(issue, patch))
 
 
 @traceable(name="second_opinion")
@@ -86,34 +91,39 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict) -> tuple[Verdic
 
     base = await swe_image(config.contree(), inst.instance_id)
     w = await write_test(inst.problem_statement, base)
-    ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries, "test_code": w.test_code}
+    ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
+                    "test_code": w.test_code, "tool_log": w.log}
     if w.test_code is None:
         return Verdict.UNPROVEN, f"no valid reproducing test after {w.attempts} attempt(s): {w.reason}"
 
     test = {TEST_PATH: w.test_code.encode()}
     pr = base if patch is None else await apply_patch(base, patch)
     n, p2p = config.VERDICT_RUNS, inst.pass_to_pass
+    files = suite_files(p2p)  # by file: one PASS_TO_PASS id missing at base would abort a nodeid run
     jobs = [_times(n, lambda: run_pytest(base, TEST_ARGS, test))]
     if pr is not None:
         jobs.append(_times(n, lambda: run_pytest(pr, TEST_ARGS, test)))
-        if p2p:
-            jobs += [run_pytest(base, p2p), run_pytest(pr, p2p)]
+        if files:
+            jobs += [run_pytest(base, files), run_pytest(pr, files)]
     res = await asyncio.gather(*jobs)
     base_runs = res[0]
     pr_runs = res[1] if pr is not None else None
-    base_suite, pr_suites = (res[2], [res[3]]) if len(res) == 4 else (None, None)
-    if base_suite is not None:
-        cands = suite_candidates(base_suite, pr_suites[0])
-        if cands:  # rerun only what looks broken, to rule out flakes
-            pr_suites += await _times(n - 1, lambda: run_pytest(pr, cands))
+    base_suites, pr_suites = ([restrict(res[2], p2p)], [res[3]]) if len(res) == 4 else (None, None)
+    if base_suites is not None:
+        cands = suite_candidates(base_suites[0], pr_suites[0])
+        if cands:  # rerun what looks broken on both sides at once, to rule out flakes and outages
+            b, p = await asyncio.gather(_times(n - 1, lambda: run_pytest(base, cands)),
+                                        _times(n - 1, lambda: run_pytest(pr, cands)))
+            base_suites += b
+            pr_suites += p
 
     ev["forks"] = {
         "base_with_test": [_summary(r) for r in base_runs],
         "pr_with_test": [_summary(r) for r in pr_runs] if pr_runs else "patch did not apply",
-        "base_suite": _summary(base_suite) if base_suite else None,
+        "base_suite": [_summary(r) for r in base_suites] if base_suites else None,
         "pr_suite": [_summary(r) for r in pr_suites] if pr_suites else None,
     }
-    v, reason = fix_verdict(base_runs, pr_runs, base_suite, pr_suites)
+    v, reason = fix_verdict(base_runs, pr_runs, base_suites, pr_suites)
     if v is Verdict.REFUTED:
         j = await judge(inst.problem_statement, w.test_code, base_runs[0].output)
         ev["second_opinion"] = j.model_dump()

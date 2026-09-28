@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from receipts.sandbox import MARKER, parse_probe_output, run_pytest
+from fakes import FakeImage
+from receipts.sandbox import MARKER, apply_patch, parse_probe_output, run_pytest, suite_files
 
 PROBE_DIR = Path(__file__).resolve().parent.parent / "receipts"
 
@@ -63,3 +64,33 @@ def test_parse_probe_output_without_marker_is_empty():
 def test_run_pytest_refuses_empty_targets():
     with pytest.raises(ValueError):
         asyncio.run(run_pytest(None, []))
+
+
+def test_probe_main_continues_past_collection_errors(tmp_path):
+    (tmp_path / "test_good.py").write_text("def test_a(): assert True\n")
+    (tmp_path / "test_bad.py").write_text("import nonexistent_module_xyz\n")
+    (tmp_path / "args.json").write_text('["test_good.py", "test_bad.py"]')
+    out = tmp_path / "out.json"
+    env = {**os.environ, "PYTHONPATH": str(PROBE_DIR), "RECEIPTS_OUT": str(out),
+           "RECEIPTS_ARGS": str(tmp_path / "args.json")}
+    subprocess.run([sys.executable, str(PROBE_DIR / "pytest_probe.py")], cwd=tmp_path, env=env, capture_output=True)
+    r = json.loads(out.read_text())
+    assert r["test_good.py::test_a"]["outcome"] == "passed"
+    assert r["test_bad.py"]["outcome"] == "error"
+
+
+def test_run_pytest_activates_testbed_env_portably():
+    # `. bin/activate testbed` drops the argument under dash (/bin/sh on Ubuntu) and activates base.
+    img = FakeImage(stdout=MARKER + "{}")
+    asyncio.run(run_pytest(img, ["t.py"]))
+    assert ". /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed" in img.calls[0]["shell"]
+
+
+def test_apply_patch_never_fuzzes():
+    img = FakeImage(exit_code=1)
+    assert asyncio.run(apply_patch(img, "diff")) is None
+    assert "fuzz" not in img.calls[0]["shell"] and img.calls[0]["disposable"] is False
+
+
+def test_suite_files():
+    assert suite_files(["a.py::T::x", "a.py::y", "b.py::z w", "c.py"]) == ["a.py", "b.py", "c.py"]

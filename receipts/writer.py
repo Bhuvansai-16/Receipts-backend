@@ -7,15 +7,21 @@ from dataclasses import dataclass, field
 
 from contree_sdk.langchain.sandbox import ContreeSandbox
 from deepagents import create_deep_agent
+from deepagents.backends.protocol import ExecuteResponse
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 
 from . import config
-from .sandbox import TEST_ARGS, TEST_PATH, run_pytest, text
+from .sandbox import ACTIVATE, TEST_ARGS, TEST_PATH, run_pytest, text
 from .verdict import PytestRun, repro_check
 
 CODE_HOSTS = ["github.com", "gitlab.com", "bitbucket.org", "githubusercontent.com", "sourcegraph.com",
               "gitee.com", "codeberg.org", "huggingface.co", "swebench.com"]
+# ponytail: allowlist of docs sites for the in-scope repos; readthedocs `_modules` pages can still show
+# newer source, so blindness against the web is best-effort (see README).
+DOC_DOMAINS = ["readthedocs.io", "docs.python.org", "pydata.org", "scikit-learn.org", "matplotlib.org",
+               "sphinx-doc.org", "pytest.org", "palletsprojects.com", "astropy.org", "xarray.dev", "numpy.org",
+               "scipy.org", "python-requests.org"]
 
 PROMPT = f"""You write ONE pytest file that reproduces a reported bug in the repository at /testbed.
 
@@ -25,11 +31,44 @@ Rules:
 - Tests must assert the behaviour the issue says is CORRECT, so they FAIL on the current code with an
   AssertionError (use plain `assert`). Import errors, other exceptions, or skips do not count.
 - Keep it small: 1-3 focused test functions, no network access, no new dependencies.
-- Run it with: cd /testbed && . /opt/miniconda3/bin/activate testbed && python -m pytest receipts_test.py -q
+- Run it with: {ACTIVATE} && python -m pytest receipts_test.py -q
 - When it fails for the right reason, call submit_test. If rejected, read the reason, fix the test, submit again.
 - Stop as soon as submit_test answers ACCEPTED.
 - docs_search is for library/API documentation only.
 """
+
+
+class SafeSandbox(ContreeSandbox):
+    """ContreeSandbox that survives sandbox errors and logs every command for the evidence file.
+
+    Upstream lets SDK errors (timeouts, strict UTF-8 decoding) abort the whole agent, and the session is
+    left FAILED with no way back.
+    """
+
+    def __init__(self, session, log: list):
+        super().__init__(session)
+        self.log = log
+
+    async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
+        async with self._lock:
+            try:
+                r = (await self._session.run(shell=command, timeout=timeout, disposable=False, stdout=bytes,
+                                             stderr=bytes, truncate_output_at=10 * 1024 * 1024)).result
+                out = ExecuteResponse(output=text(r.stdout) + text(r.stderr), exit_code=r.exit_code,
+                                      truncated=r.truncated)
+            except Exception as e:
+                self._session = type(self._session)(self._session)  # restart from the last good snapshot
+                out = ExecuteResponse(output=f"sandbox error: {type(e).__name__}: {e}", exit_code=1)
+        self.log.append({"cmd": command[:2000], "exit": out.exit_code, "output": out.output[-1500:]})
+        return out
+
+
+async def blind_workspace(base_image):
+    """The writer's own copy of base, without git history (tags/reflog may point past the fix).
+
+    Verification never uses this image; it forks the untouched base.
+    """
+    return await base_image.run(shell="rm -rf /testbed/.git", disposable=False, timeout=config.SANDBOX_TIMEOUT_S)
 
 
 @dataclass
@@ -39,16 +78,17 @@ class WriterResult:
     attempts: int = 0
     reason: str = "writer never submitted a test"
     queries: list[str] = field(default_factory=list)
+    log: list[dict] = field(default_factory=list)
 
 
 async def write_test(issue: str, base_image) -> WriterResult:
     out = WriterResult()
-    backend = ContreeSandbox(base_image.session())
-    tavily = TavilySearch(max_results=5, exclude_domains=CODE_HOSTS)
+    backend = SafeSandbox((await blind_workspace(base_image)).session(), out.log)
+    tavily = TavilySearch(max_results=5, include_domains=DOC_DOMAINS, exclude_domains=CODE_HOSTS)
 
     @tool
     async def docs_search(query: str) -> str:
-        """Search library/API documentation on the web. Code hosting sites are excluded."""
+        """Search library/API documentation sites. Code hosting sites are excluded."""
         out.queries.append(query)
         return str(await tavily.ainvoke({"query": query}))[:6000]
 

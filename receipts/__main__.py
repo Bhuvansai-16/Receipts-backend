@@ -33,6 +33,13 @@ async def smoke(instance_id: str | None) -> None:
     print(f"probe (expect failed/AssertionError): {run.results or run.output}")
 
 
+def load_patch(arg: str, gold: str) -> tuple[str | None, str]:
+    """--patch value -> (patch text or None for a no-op PR, label for the evidence filename)."""
+    if arg in ("gold", "none"):
+        return (gold if arg == "gold" else None), arg
+    return Path(arg).read_text(encoding="utf-8"), Path(arg).stem  # utf-8: Windows default is cp1252
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")  # Windows console is cp1252; model output isn't
     ap = argparse.ArgumentParser(prog="receipts")
@@ -53,8 +60,7 @@ def main() -> None:
         inst = load_instance(a.instance_id)
     except ValueError as e:
         sys.exit(f"error: {e}")
-    patch = {"gold": inst.gold_patch, "none": None}[a.patch] if a.patch in ("gold", "none") else Path(a.patch).read_text()
-    label = a.patch if a.patch in ("gold", "none") else Path(a.patch).stem
+    patch, label = load_patch(a.patch, inst.gold_patch)
     ev = asyncio.run(check(inst, patch))
     config.RUNS_DIR.mkdir(exist_ok=True)
     out = config.RUNS_DIR / f"{inst.instance_id}-{label}-{datetime.now():%Y%m%d-%H%M%S}.json"
