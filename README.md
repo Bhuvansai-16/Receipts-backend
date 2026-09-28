@@ -13,6 +13,13 @@ cp .env.example .env   # fill in keys
 python -m receipts smoke --instance psf__requests-1142
 ```
 
+## Sandbox provider
+
+`SANDBOX_PROVIDER=contree` (default) runs on Nebius Token Factory Sandboxes, which the submission uses.
+`SANDBOX_PROVIDER=daytona` is a stopgap while Sandboxes beta access is pending. It builds one Daytona snapshot
+per SWE-bench instance on first use; each run starts a fresh sandbox from it and replays recorded steps
+(patch apply, `.git` removal) in place of Contree's fork.
+
 ## Run
 
 ```bash

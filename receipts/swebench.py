@@ -1,7 +1,10 @@
 """SWE-bench Verified instances. Never exposes test_patch, FAIL_TO_PASS or hints (hidden ground truth)."""
 import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
+
+from . import config
 
 # Repos whose SWE-bench harness runs pytest. django (runtests.py) and sympy (bin/test) are out of MVP scope.
 PYTEST_REPOS = {
@@ -36,7 +39,16 @@ def load_instance(instance_id: str) -> Instance:
                     json.loads(row["PASS_TO_PASS"]))
 
 
-async def swe_image(sdk, instance_id: str):
-    """Preloaded SWE-bench env image (repo at /testbed, conda env 'testbed'). oci() reuses it if already imported."""
-    name = instance_id.replace("__", "_1776_").lower()
-    return await sdk.images.oci(f"docker://docker.io/swebench/sweb.eval.x86_64.{name}:latest")
+def docker_ref(instance_id: str) -> str:
+    """SWE-bench env image: repo at /testbed, conda env 'testbed'."""
+    return f"swebench/sweb.eval.x86_64.{instance_id.replace('__', '_1776_').lower()}:latest"
+
+
+async def base_image(instance_id: str):
+    """Clean base checkpoint for the instance on the configured sandbox provider."""
+    ref = docker_ref(instance_id)
+    if config.SANDBOX_PROVIDER == "daytona":
+        from . import daytona_backend
+
+        return await daytona_backend.base_image(ref, "receipts-" + re.sub(r"[^a-z0-9]+", "-", instance_id.lower()))
+    return await config.contree().images.oci(f"docker://docker.io/{ref}")  # reuses the preloaded env

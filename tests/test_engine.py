@@ -37,7 +37,7 @@ def fakes(monkeypatch):
     async def classify(issue, patch):
         return engine.Claim(kind="fix", claim="c")
 
-    async def swe_image(sdk, iid):
+    async def base_image(iid):
         return Img("base")
 
     async def write_test(issue, img):
@@ -46,7 +46,7 @@ def fakes(monkeypatch):
     async def judge(*a):
         return engine.Judgement(faithful=True, reason="matches issue")
 
-    for name, fn in [("classify", classify), ("swe_image", swe_image), ("write_test", write_test), ("judge", judge)]:
+    for name, fn in [("classify", classify), ("base_image", base_image), ("write_test", write_test), ("judge", judge)]:
         monkeypatch.setattr(engine, name, fn)
     monkeypatch.setattr(engine.config, "contree", lambda: None)
 

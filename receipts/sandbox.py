@@ -8,8 +8,10 @@ from .verdict import PytestRun, TestResult
 
 PROBE_SRC = (Path(__file__).parent / "pytest_probe.py").read_bytes()
 MARKER = "__RECEIPTS_JSON__"
-# Works under dash (/bin/sh on Ubuntu): `. bin/activate testbed` would drop the argument there.
-ACTIVATE = "cd /testbed && . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed"
+# The repo's env. Works under dash (/bin/sh on Ubuntu): `. bin/activate testbed` would drop the argument there.
+# Without it, `python` is conda base (3.11 in SWE-bench images), where old repos don't even import.
+ENV = ". /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed"
+ACTIVATE = f"cd /testbed && {ENV}"
 TEST_PATH = "/testbed/receipts_test.py"
 TEST_ARGS = ["receipts_test.py"]
 _sem: asyncio.Semaphore | None = None

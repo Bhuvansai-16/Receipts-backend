@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from fakes import FakeImage
 from receipts import writer
-from receipts.sandbox import ACTIVATE
+from receipts.sandbox import ACTIVATE, ENV
 
 
 def test_prompt_uses_portable_activation():
@@ -18,10 +18,13 @@ def test_writer_workspace_has_no_git_history():
 
 
 class FakeSession:
+    shells = []
+
     def __init__(self, prev=None, fail=False):
         self.fail = fail
 
     async def run(self, **kw):
+        FakeSession.shells.append(kw["shell"])
         if self.fail:
             raise TimeoutError("operation timed out")
         return SimpleNamespace(result=SimpleNamespace(stdout=b"caf\xe9 ok", stderr=b"", exit_code=0, truncated=False))
@@ -35,3 +38,4 @@ def test_safe_sandbox_turns_errors_into_output_and_recovers():
     r2 = asyncio.run(sb.aexecute("echo"))  # session reset to last good snapshot
     assert r2.exit_code == 0 and "caf" in r2.output
     assert [e["cmd"] for e in sb.log] == ["pytest", "echo"]
+    assert FakeSession.shells[-1] == f"{ENV} && echo"  # agent commands run in the repo's env, not conda base

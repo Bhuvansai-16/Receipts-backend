@@ -12,7 +12,7 @@ from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 
 from . import config
-from .sandbox import ACTIVATE, TEST_ARGS, TEST_PATH, run_pytest, text
+from .sandbox import ACTIVATE, ENV, TEST_ARGS, TEST_PATH, run_pytest, text
 from .verdict import PytestRun, repro_check
 
 CODE_HOSTS = ["github.com", "gitlab.com", "bitbucket.org", "githubusercontent.com", "sourcegraph.com",
@@ -52,7 +52,7 @@ class SafeSandbox(ContreeSandbox):
     async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         async with self._lock:
             try:
-                r = (await self._session.run(shell=command, timeout=timeout, disposable=False, stdout=bytes,
+                r = (await self._session.run(shell=f"{ENV} && {command}", timeout=timeout, disposable=False, stdout=bytes,
                                              stderr=bytes, truncate_output_at=10 * 1024 * 1024)).result
                 out = ExecuteResponse(output=text(r.stdout) + text(r.stderr), exit_code=r.exit_code,
                                       truncated=r.truncated)
@@ -61,6 +61,13 @@ class SafeSandbox(ContreeSandbox):
                 out = ExecuteResponse(output=f"sandbox error: {type(e).__name__}: {e}", exit_code=1)
         self.log.append({"cmd": command[:2000], "exit": out.exit_code, "output": out.output[-1500:]})
         return out
+
+
+async def agent_backend(image, log: list):
+    """Deepagents backend on a live sandbox in `image`'s state (Daytona images bring their own)."""
+    if hasattr(image, "agent_backend"):
+        return await image.agent_backend(log)
+    return SafeSandbox(image.session(), log)
 
 
 async def blind_workspace(base_image):
@@ -83,7 +90,7 @@ class WriterResult:
 
 async def write_test(issue: str, base_image) -> WriterResult:
     out = WriterResult()
-    backend = SafeSandbox((await blind_workspace(base_image)).session(), out.log)
+    backend = await agent_backend(await blind_workspace(base_image), out.log)
     tavily = TavilySearch(max_results=5, include_domains=DOC_DOMAINS, exclude_domains=CODE_HOSTS)
 
     @tool
@@ -119,4 +126,7 @@ async def write_test(issue: str, base_image) -> WriterResult:
                             config={"recursion_limit": 150, "run_name": "blind_test_writer"})
     except Exception as e:  # recursion limit / model error: keep whatever was accepted
         out.reason = f"{out.reason}; agent stopped: {type(e).__name__}: {e}"[:1000]
+    finally:
+        if hasattr(backend, "aclose"):
+            await backend.aclose()
     return out

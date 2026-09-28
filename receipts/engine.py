@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from . import config
 from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
-from .swebench import Instance, swe_image
+from .swebench import Instance, base_image
 from .verdict import PytestRun, Verdict, fix_verdict, restrict, suite_candidates
 from .writer import write_test
 
@@ -89,7 +89,7 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict) -> tuple[Verdic
     if claim.kind != "fix":
         return Verdict.NO_CHECKABLE_CLAIM, f"classified as '{claim.kind}': nothing to check"
 
-    base = await swe_image(config.contree(), inst.instance_id)
+    base = await base_image(inst.instance_id)
     w = await write_test(inst.problem_statement, base)
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
                     "test_code": w.test_code, "tool_log": w.log}

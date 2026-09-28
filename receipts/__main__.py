@@ -17,20 +17,32 @@ async def smoke(instance_id: str | None) -> None:
 
     from .sandbox import ACTIVATE, TEST_ARGS, TEST_PATH, run_pytest, text
 
-    sdk = config.contree()
-    r = await (await sdk.images.use("busybox:latest")).run(shell="echo sandbox-ok")
-    print(f"sandbox: exit={r.exit_code} {text(r.stdout).strip()}")
+    print(f"sandbox provider: {config.SANDBOX_PROVIDER}")
+    if config.SANDBOX_PROVIDER == "contree":
+        r = await (await config.contree().images.use("busybox:latest")).run(shell="echo sandbox-ok")
+        print(f"sandbox: exit={r.exit_code} {text(r.stdout).strip()}")
     if not instance_id:
         return
 
-    from .swebench import swe_image
+    from .swebench import base_image
 
-    img = await swe_image(sdk, instance_id)
+    img = await base_image(instance_id)
     r = await img.run(shell=f"{ACTIVATE} && python --version && python -m pytest --version; git log -1 --oneline",
                       timeout=config.SANDBOX_TIMEOUT_S)
     print(f"swe image {instance_id}: exit={r.exit_code}\n{text(r.stdout)}{text(r.stderr)}")
     run = await run_pytest(img, TEST_ARGS, {TEST_PATH: b"def test_probe():\n    assert 1 == 2\n"})
     print(f"probe (expect failed/AssertionError): {run.results or run.output}")
+
+
+async def _closing(coro):
+    """Run `coro`, then close the Daytona HTTP session (otherwise aiohttp warns at exit)."""
+    try:
+        return await coro
+    finally:
+        if config.SANDBOX_PROVIDER == "daytona":
+            from .daytona_backend import client
+
+            await client().close()
 
 
 def load_patch(arg: str, gold: str) -> tuple[str | None, str]:
@@ -51,7 +63,7 @@ def main() -> None:
     r.add_argument("--patch", default="gold", help="gold | none | path to a .diff file")
     a = ap.parse_args()
     if a.cmd == "smoke":
-        return asyncio.run(smoke(a.instance))
+        return asyncio.run(_closing(smoke(a.instance)))
 
     from .engine import check
     from .swebench import load_instance
@@ -61,7 +73,7 @@ def main() -> None:
     except ValueError as e:
         sys.exit(f"error: {e}")
     patch, label = load_patch(a.patch, inst.gold_patch)
-    ev = asyncio.run(check(inst, patch))
+    ev = asyncio.run(_closing(check(inst, patch)))
     config.RUNS_DIR.mkdir(exist_ok=True)
     out = config.RUNS_DIR / f"{inst.instance_id}-{label}-{datetime.now():%Y%m%d-%H%M%S}.json"
     out.write_text(json.dumps(ev, indent=2, default=str), encoding="utf-8")
