@@ -42,7 +42,7 @@ Rules:
 - Tests must assert the behaviour the issue says is CORRECT, so they FAIL on the current code with an
   AssertionError (use plain `assert`). Import errors, other exceptions, or skips do not count.
 - If the bug IS an exception (e.g. "fit raises TypeError"), call the code inside try/except and turn it into
-  an assertion: `except TypeError as e: assert False, f"raised {e!r}"`. Don't use pytest.raises for this.
+  an assertion: `except TypeError as e: assert False, f"raised {{e!r}}"`. Don't use pytest.raises for this.
 - Test functions must be named test_* at module level so pytest collects them.
 - Test ONLY what the issue describes, the way it describes it: prefer the issue's own example, API and inputs.
   No extra cases, other methods/verbs, or stricter checks the issue doesn't ask for; a reviewer rejects
