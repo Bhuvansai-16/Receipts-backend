@@ -98,10 +98,11 @@ def test_agent_backend_enforces_command_budget(started, monkeypatch):
     monkeypatch.setattr(sandbox, "AGENT_SOFT_BUDGET", 2)
     monkeypatch.setattr(sandbox, "AGENT_HARD_BUDGET", 3)
     backend = asyncio.run(writer.agent_backend(dt.DaytonaImage("snap"), []))
-    outs = [asyncio.run(backend.aexecute(f"c{i}")) for i in range(4)]
+    outs = [asyncio.run(backend.aexecute(f"c{i}")) for i in range(3)]
     assert "submit_test" not in outs[0].output and "submit_test" in outs[1].output  # nudge from the soft limit
-    assert outs[3].exit_code == 1 and "submit_test" in outs[3].output
-    assert len(started[0].cmds) == 3  # the 4th command was refused, never executed
+    with pytest.raises(sandbox.AgentBudgetExceeded):  # hard limit stops the agent instead of burning tokens
+        asyncio.run(backend.aexecute("c3"))
+    assert len(started[0].cmds) == 3  # the 4th command never ran
 
 
 def test_docker_ref():

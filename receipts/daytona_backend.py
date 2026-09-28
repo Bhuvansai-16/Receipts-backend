@@ -80,8 +80,7 @@ class DaytonaAgentSandbox(BaseSandbox):
         return self._sb.id
 
     async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
-        if refusal := sandbox.over_budget(self.log):
-            return refusal
+        sandbox.check_budget(self.log)
         try:
             r = await self._sb.process.exec(f"{ENV} && {command}", timeout=int(timeout or config.SANDBOX_TIMEOUT_S))
             out = ExecuteResponse(output=r.result or "", exit_code=r.exit_code)

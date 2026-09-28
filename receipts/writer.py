@@ -28,8 +28,9 @@ PROMPT = f"""You write ONE pytest file that reproduces a reported bug in the rep
 Work in this order and be quick (aim for submit_test within ~15 tool calls):
 1. Find the code the issue is about: grep / read only the few relevant files.
 2. Write {TEST_PATH} with write_file.
-3. Run it: {ACTIVATE} && python -m pytest receipts_test.py -q
-4. If it fails with an AssertionError that shows the bug, call submit_test. If rejected, fix the file and resubmit.
+3. Call submit_test right away. It runs your file on a clean copy of the repo and returns the pytest output.
+   (To run it yourself: {ACTIVATE} && python -m pytest receipts_test.py -q)
+4. If REJECTED, read the reason and output, fix the file, and submit again, until ACCEPTED.
 
 Rules:
 - You get only the issue and the current (buggy) code. Never look for, write, or apply a fix.
@@ -55,8 +56,7 @@ class SafeSandbox(ContreeSandbox):
         self.log = log
 
     async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
-        if refusal := sandbox.over_budget(self.log):
-            return refusal
+        sandbox.check_budget(self.log)
         async with self._lock:
             try:
                 r = (await self._session.run(shell=f"{ENV} && {command}", timeout=timeout, disposable=False, stdout=bytes,
@@ -127,12 +127,18 @@ async def write_test(issue: str, base_image) -> WriterResult:
 
     agent = create_deep_agent(model=config.llm("writer"), tools=[docs_search, submit_test],
                               system_prompt=PROMPT, backend=backend)
+    stopped = ""
     try:
         await agent.ainvoke({"messages": [{"role": "user", "content": f"Issue:\n\n{issue}"}]},
                             config={"recursion_limit": 150, "run_name": "blind_test_writer"})
-    except Exception as e:  # recursion limit / model error: keep whatever was accepted
-        out.reason = f"{out.reason}; agent stopped: {type(e).__name__}: {e}"[:1000]
+    except Exception as e:  # command budget / recursion limit / model error
+        stopped = f"agent stopped: {type(e).__name__}: {e}"[:500]
+    try:
+        if out.test_code is None and out.attempts < config.MAX_TEST_ATTEMPTS:
+            await submit_test.ainvoke({})  # judge whatever test file the agent left behind
     finally:
         if hasattr(backend, "aclose"):
             await backend.aclose()
+    if stopped and out.test_code is None:
+        out.reason = f"{out.reason}; {stopped}"
     return out
