@@ -2,9 +2,7 @@
          python -m receipts run INSTANCE_ID [--patch gold|none|FILE]"""
 import argparse
 import asyncio
-import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from . import config
@@ -65,7 +63,7 @@ def main() -> None:
     if a.cmd == "smoke":
         return asyncio.run(_closing(smoke(a.instance)))
 
-    from .engine import check
+    from .engine import check, save_evidence
     from .swebench import load_instance
 
     try:
@@ -74,9 +72,7 @@ def main() -> None:
         sys.exit(f"error: {e}")
     patch, label = load_patch(a.patch, inst.gold_patch)
     ev = asyncio.run(_closing(check(inst, patch)))
-    config.RUNS_DIR.mkdir(exist_ok=True)
-    out = config.RUNS_DIR / f"{inst.instance_id}-{label}-{datetime.now():%Y%m%d-%H%M%S}.json"
-    out.write_text(json.dumps(ev, indent=2, default=str), encoding="utf-8")
+    out = save_evidence(ev, label)
     tokens = sum(u.get("total_tokens", 0) for u in (ev.get("tokens") or {}).values())
     print(f"\n{ev['verdict']}: {ev['reason']}\n  {ev['seconds']}s, {tokens} tokens\n  evidence: {out}")
 

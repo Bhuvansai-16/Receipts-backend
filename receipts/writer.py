@@ -142,8 +142,9 @@ class WriterResult:
     scope: str = ""  # what the scope check pruned and why
 
 
-async def write_test(issue: str, base_image) -> WriterResult:
+async def write_test(issue: str, base_image, emit=None) -> WriterResult:
     out = WriterResult()
+    emit = emit or (lambda type_, data=None: None)
     backend = await agent_backend(await blind_workspace(base_image), out.log)
     tavily = TavilySearch(max_results=5, include_domains=DOC_DOMAINS, exclude_domains=CODE_HOSTS)
 
@@ -156,6 +157,14 @@ async def write_test(issue: str, base_image) -> WriterResult:
     @tool
     async def submit_test() -> str:
         """Submit /testbed/receipts_test.py. It is re-run on a clean copy of the repo and checked."""
+        before = out.attempts
+        message = await check_submission()
+        if out.attempts > before:  # a real attempt (not "already accepted" / "limit reached")
+            emit("writer_submit", {"attempt": out.attempts, "accepted": out.test_code is not None,
+                                   "reason": out.reason[:300]})
+        return message
+
+    async def check_submission() -> str:
         if out.test_code is not None:
             return "ACCEPTED already. Stop."
         if out.attempts >= config.MAX_TEST_ATTEMPTS:

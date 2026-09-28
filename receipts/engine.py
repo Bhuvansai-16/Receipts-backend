@@ -1,10 +1,12 @@
 """Orchestrator: classify -> blind test -> forks -> verdict rules -> second opinion before REFUTED."""
 import asyncio
+import json
 import re
 import time
 from collections import Counter
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 from langchain_core.callbacks import get_usage_metadata_callback
@@ -76,44 +78,78 @@ def _summary(run: PytestRun) -> dict:
 
 
 async def _times(n: int, make) -> list[PytestRun]:
-    return list(await asyncio.gather(*(make() for _ in range(n))))
+    return list(await asyncio.gather(*(make(i) for i in range(n))))
+
+
+def _passed(run: PytestRun) -> bool:
+    return bool(run.results) and all(r.outcome == "passed" for r in run.results.values())
+
+
+def save_evidence(ev: dict, label: str) -> Path:
+    """Write the evidence JSON to runs/<instance>-<label>-<timestamp>.json (shared by CLI and server)."""
+    config.RUNS_DIR.mkdir(exist_ok=True)
+    path = config.RUNS_DIR / f"{ev['instance_id']}-{label}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    path.write_text(json.dumps(ev, indent=2, default=str), encoding="utf-8")
+    return path
 
 
 @traceable(name="receipts_check")
-async def check(inst: Instance, patch: str | None) -> dict:
-    """patch=None means a PR that changes nothing (known-wrong control)."""
+async def check(inst: Instance, patch: str | None, emit=None) -> dict:
+    """patch=None means a PR that changes nothing (known-wrong control).
+
+    emit(type, data) is called as each stage lands (the web UI streams these); events are also
+    stored in the evidence as ev["events"] so a finished run replays identically.
+    """
     t0 = time.monotonic()
     ev: dict = {"instance_id": inst.instance_id, "repo": inst.repo, "patch_files": changed_files(patch or ""),
-                "started_at": datetime.now(timezone.utc).isoformat(), "models": config.MODELS}
+                "started_at": datetime.now(timezone.utc).isoformat(), "models": config.MODELS, "events": []}
+
+    def say(type_: str, data: dict | None = None) -> None:
+        ev["events"].append({"type": type_, "t": round(time.monotonic() - t0, 1), "data": data or {}})
+        if emit:
+            emit(type_, data or {})
+
     with get_usage_metadata_callback() as usage:
         try:
-            v, reason = await _pipeline(inst, patch, ev)
+            v, reason = await _pipeline(inst, patch, ev, say)
         except Exception as e:  # asymmetry rule: anything unexpected is UNPROVEN, never REFUTED
             v, reason = Verdict.UNPROVEN, f"pipeline error: {type(e).__name__}: {e}"
     ev.update(verdict=v.value, reason=reason, seconds=round(time.monotonic() - t0, 1), tokens=usage.usage_metadata)
+    say("verdict", {"verdict": v.value, "reason": reason, "seconds": ev["seconds"],
+                    "tokens": sum(u.get("total_tokens", 0) for u in (ev["tokens"] or {}).values())})
+    say("done")
     return ev
 
 
-async def _pipeline(inst: Instance, patch: str | None, ev: dict) -> tuple[Verdict, str]:
+async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[Verdict, str]:
     claim = await classify(inst.problem_statement, patch or "")
     ev["claim"] = claim.model_dump()
+    say("claim", ev["claim"])
     if claim.kind != "fix":
         return Verdict.NO_CHECKABLE_CLAIM, f"classified as '{claim.kind}': nothing to check"
 
     base = await base_image(inst.instance_id)
-    w = await write_test(inst.problem_statement, base)
+    say("env_ready")
+    w = await write_test(inst.problem_statement, base, say)
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log}
     if w.test_code is None:
         return Verdict.UNPROVEN, f"no valid reproducing test after {w.attempts} attempt(s): {w.reason}"
+    say("test_accepted", {"attempts": w.attempts})
 
     test = {TEST_PATH: w.test_code.encode()}
     pr = base if patch is None else await apply_patch(base, patch)
     n, p2p = config.VERDICT_RUNS, inst.pass_to_pass
     files = suite_files(p2p)  # by file: one PASS_TO_PASS id missing at base would abort a nodeid run
-    jobs = [_times(n, lambda: run_pytest(base, TEST_ARGS, test))]
+    async def fork(side: str, image, i: int) -> PytestRun:
+        run = await run_pytest(image, TEST_ARGS, test)
+        failing = [r.msg for r in run.results.values() if r.outcome != "passed"]
+        say("fork", {"side": side, "n": i + 1, "passed": _passed(run), "message": (failing or [""])[0][:300]})
+        return run
+
+    jobs = [_times(n, lambda i: fork("base", base, i))]
     if pr is not None:
-        jobs.append(_times(n, lambda: run_pytest(pr, TEST_ARGS, test)))
+        jobs.append(_times(n, lambda i: fork("pr", pr, i)))
         if files:
             jobs += [run_pytest(base, files), run_pytest(pr, files)]
     res = await asyncio.gather(*jobs)
@@ -123,10 +159,12 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict) -> tuple[Verdic
     if base_suites is not None:
         cands = suite_candidates(base_suites[0], pr_suites[0])
         if cands:  # rerun what looks broken on both sides at once, to rule out flakes and outages
-            b, p = await asyncio.gather(_times(n - 1, lambda: run_pytest(base, cands)),
-                                        _times(n - 1, lambda: run_pytest(pr, cands)))
+            b, p = await asyncio.gather(_times(n - 1, lambda i: run_pytest(base, cands)),
+                                        _times(n - 1, lambda i: run_pytest(pr, cands)))
             base_suites += b
             pr_suites += p
+        say("suite", {"base_passed": sum(r.outcome == "passed" for r in base_suites[0].results.values()),
+                      "base_total": len(base_suites[0].results), "pr_failed": len(cands)})
 
     ev["forks"] = {
         "base_with_test": [_summary(r) for r in base_runs],
@@ -138,6 +176,7 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict) -> tuple[Verdic
     if v is Verdict.REFUTED:
         j = await judge(inst.problem_statement, w.test_code, base_runs[0].output)
         ev["second_opinion"] = j.model_dump()
+        say("second_opinion", ev["second_opinion"])
         if not j.faithful:
             return Verdict.UNPROVEN, f"second opinion doubts the test: {j.reason}"
     return v, reason

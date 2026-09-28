@@ -101,7 +101,7 @@ def test_keep_tests_drops_tests_that_passed_on_base():
     assert "test_guard" not in kept and "__main__" not in kept  # runner block would call dropped tests
 
 
-def _fake_writer_run(monkeypatch, code, results, scope):
+def _fake_writer_run(monkeypatch, code, results, scope, emit=None):
     class Agent:
         async def ainvoke(self, *a, **k):
             return None  # agent stops without submitting; the leftover file gets submitted
@@ -132,7 +132,7 @@ def _fake_writer_run(monkeypatch, code, results, scope):
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
                      ("scope_check", scope_check)]:
         monkeypatch.setattr(writer, name, fn)
-    return asyncio.run(writer.write_test("issue", object()))
+    return asyncio.run(writer.write_test("issue", object(), emit))
 
 
 CODE = ("def test_bug():\n    assert 1 == 2\n\n\ndef test_extra():\n    assert 3 == 4\n\n\n"
@@ -153,3 +153,13 @@ def test_scope_check_keeps_only_faithful_failing_tests(monkeypatch):
 def test_rejected_when_no_test_sticks_to_the_issue(monkeypatch):
     out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=[]))
     assert out.test_code is None and "sticks to the issue" in out.reason
+
+
+def test_writer_emits_submit_events(monkeypatch):
+    seen = []
+    _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=[]), lambda t, d: seen.append((t, d)))
+    _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=["test_bug"]),
+                     lambda t, d: seen.append((t, d)))
+    subs = [d for t, d in seen if t == "writer_submit"]
+    assert [d["accepted"] for d in subs] == [False, True]
+    assert subs[0]["attempt"] == 1 and "sticks to the issue" in subs[0]["reason"]
