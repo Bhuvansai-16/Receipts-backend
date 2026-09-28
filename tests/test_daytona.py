@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from receipts import daytona_backend as dt
-from receipts import swebench, writer
+from receipts import sandbox, swebench, writer
 from receipts.sandbox import ENV
 
 
@@ -92,6 +92,16 @@ def test_agent_backend_logs_turns_errors_into_output_and_closes(started):
     assert ok.exit_code == 0 and dl.content == b"def test(): assert 0" and missing.error
     assert bad.exit_code == 1 and "sandbox error" in bad.output
     assert [e["cmd"] for e in log] == ["ls", "pytest"] and sb.deleted
+
+
+def test_agent_backend_enforces_command_budget(started, monkeypatch):
+    monkeypatch.setattr(sandbox, "AGENT_SOFT_BUDGET", 2)
+    monkeypatch.setattr(sandbox, "AGENT_HARD_BUDGET", 3)
+    backend = asyncio.run(writer.agent_backend(dt.DaytonaImage("snap"), []))
+    outs = [asyncio.run(backend.aexecute(f"c{i}")) for i in range(4)]
+    assert "submit_test" not in outs[0].output and "submit_test" in outs[1].output  # nudge from the soft limit
+    assert outs[3].exit_code == 1 and "submit_test" in outs[3].output
+    assert len(started[0].cmds) == 3  # the 4th command was refused, never executed
 
 
 def test_docker_ref():

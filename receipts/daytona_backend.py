@@ -16,6 +16,7 @@ from deepagents.backends.protocol import ExecuteResponse, FileDownloadResponse, 
 from deepagents.backends.sandbox import BaseSandbox
 
 from . import config
+from . import sandbox
 from .sandbox import ENV
 
 
@@ -79,13 +80,14 @@ class DaytonaAgentSandbox(BaseSandbox):
         return self._sb.id
 
     async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
+        if refusal := sandbox.over_budget(self.log):
+            return refusal
         try:
             r = await self._sb.process.exec(f"{ENV} && {command}", timeout=int(timeout or config.SANDBOX_TIMEOUT_S))
             out = ExecuteResponse(output=r.result or "", exit_code=r.exit_code)
         except Exception as e:
             out = ExecuteResponse(output=f"sandbox error: {type(e).__name__}: {e}", exit_code=1)
-        self.log.append({"cmd": command[:2000], "exit": out.exit_code, "output": out.output[-1500:]})
-        return out
+        return sandbox.record(self.log, command, out)
 
     async def aupload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
         await self._sb.fs.upload_files([FileUpload(source=data, destination=path) for path, data in files])

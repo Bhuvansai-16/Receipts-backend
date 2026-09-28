@@ -11,7 +11,7 @@ from deepagents.backends.protocol import ExecuteResponse
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 
-from . import config
+from . import config, sandbox
 from .sandbox import ACTIVATE, ENV, TEST_ARGS, TEST_PATH, run_pytest, text
 from .verdict import PytestRun, repro_check
 
@@ -25,14 +25,19 @@ DOC_DOMAINS = ["readthedocs.io", "docs.python.org", "pydata.org", "scikit-learn.
 
 PROMPT = f"""You write ONE pytest file that reproduces a reported bug in the repository at /testbed.
 
+Work in this order and be quick (aim for submit_test within ~15 tool calls):
+1. Find the code the issue is about: grep / read only the few relevant files.
+2. Write {TEST_PATH} with write_file.
+3. Run it: {ACTIVATE} && python -m pytest receipts_test.py -q
+4. If it fails with an AssertionError that shows the bug, call submit_test. If rejected, fix the file and resubmit.
+
 Rules:
 - You get only the issue and the current (buggy) code. Never look for, write, or apply a fix.
+- Don't install packages, change the environment, or make network requests; test the code directly.
 - Do not edit repository files. Create only {TEST_PATH}.
 - Tests must assert the behaviour the issue says is CORRECT, so they FAIL on the current code with an
   AssertionError (use plain `assert`). Import errors, other exceptions, or skips do not count.
 - Keep it small: 1-3 focused test functions, no network access, no new dependencies.
-- Run it with: {ACTIVATE} && python -m pytest receipts_test.py -q
-- When it fails for the right reason, call submit_test. If rejected, read the reason, fix the test, submit again.
 - Stop as soon as submit_test answers ACCEPTED.
 - docs_search is for library/API documentation only.
 """
@@ -50,6 +55,8 @@ class SafeSandbox(ContreeSandbox):
         self.log = log
 
     async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
+        if refusal := sandbox.over_budget(self.log):
+            return refusal
         async with self._lock:
             try:
                 r = (await self._session.run(shell=f"{ENV} && {command}", timeout=timeout, disposable=False, stdout=bytes,
@@ -59,8 +66,7 @@ class SafeSandbox(ContreeSandbox):
             except Exception as e:
                 self._session = type(self._session)(self._session)  # restart from the last good snapshot
                 out = ExecuteResponse(output=f"sandbox error: {type(e).__name__}: {e}", exit_code=1)
-        self.log.append({"cmd": command[:2000], "exit": out.exit_code, "output": out.output[-1500:]})
-        return out
+        return sandbox.record(self.log, command, out)
 
 
 async def agent_backend(image, log: list):

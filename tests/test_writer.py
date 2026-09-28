@@ -2,7 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from fakes import FakeImage
-from receipts import writer
+from receipts import sandbox, writer
 from receipts.sandbox import ACTIVATE, ENV
 
 
@@ -28,6 +28,16 @@ class FakeSession:
         if self.fail:
             raise TimeoutError("operation timed out")
         return SimpleNamespace(result=SimpleNamespace(stdout=b"caf\xe9 ok", stderr=b"", exit_code=0, truncated=False))
+
+
+def test_safe_sandbox_refuses_commands_over_budget(monkeypatch):
+    monkeypatch.setattr(sandbox, "AGENT_HARD_BUDGET", 1)
+    sb = writer.SafeSandbox.__new__(writer.SafeSandbox)
+    sb._session, sb._lock, sb.log = FakeSession(), asyncio.Lock(), []
+    FakeSession.shells.clear()
+    asyncio.run(sb.aexecute("ls"))
+    r = asyncio.run(sb.aexecute("ls again"))
+    assert r.exit_code == 1 and "submit_test" in r.output and len(FakeSession.shells) == 1
 
 
 def test_safe_sandbox_turns_errors_into_output_and_recovers():

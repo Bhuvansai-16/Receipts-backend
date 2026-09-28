@@ -17,6 +17,31 @@ TEST_ARGS = ["receipts_test.py"]
 _sem: asyncio.Semaphore | None = None
 
 
+# Test-writer shell budget: a small model left alone explores forever (seen: 74 commands, 900K tokens,
+# no test). Soft limit nudges it toward submit_test; hard limit refuses further commands.
+AGENT_SOFT_BUDGET = 20
+AGENT_HARD_BUDGET = 40
+
+
+def over_budget(log: list):
+    """Refusal to return instead of running the command, or None if within budget."""
+    from deepagents.backends.protocol import ExecuteResponse
+
+    if len(log) >= AGENT_HARD_BUDGET:
+        return ExecuteResponse(output=f"[receipts] command budget ({AGENT_HARD_BUDGET}) used up. "
+                                      f"Call submit_test now.", exit_code=1)
+    return None
+
+
+def record(log: list, command: str, out):
+    """Log an agent command for the evidence file; past the soft limit, tell the agent to wrap up."""
+    log.append({"cmd": command[:2000], "exit": out.exit_code, "output": out.output[-1500:]})
+    if len(log) >= AGENT_SOFT_BUDGET:
+        out.output += (f"\n[receipts] {len(log)}/{AGENT_HARD_BUDGET} commands used. "
+                       f"Write {TEST_PATH} and call submit_test now.")
+    return out
+
+
 def _limit() -> asyncio.Semaphore:
     global _sem
     if _sem is None:
