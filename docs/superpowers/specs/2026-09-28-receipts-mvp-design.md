@@ -41,12 +41,12 @@ tests/test_verdict.py
 runs/<instance>-<ts>.json   evidence
 ```
 
-### ContreeBackend
+### Sandbox backend
 
-Contree commands are stateless: each `run(shell=..., disposable=False)` returns a new snapshot.
-The backend holds `current_image` and advances it after every `execute`, giving the agent a
-stateful sandbox. `BaseSandbox` derives file tools from `execute`; we implement `execute`, `id`,
-`upload_files`, `download_files`.
+Reuse `contree_sdk.langchain.sandbox.ContreeSandbox` (ships with contree-sdk 0.3.6): a Deepagents
+`BaseSandbox` over a Contree session, which chains `disposable=False` snapshots so the agent gets
+a stateful sandbox. No custom backend. Pytest runs use a small uploaded plugin
+(`pytest_probe.py`) that records each test's exact exception type.
 
 ## Data flow
 
@@ -61,8 +61,9 @@ stateful sandbox. `BaseSandbox` derives file tools from `execute`; we implement 
 4. Forks (asyncio, semaphore `SANDBOX_MAX_CONCURRENCY`), all from the clean base image:
    - base + test, `VERDICT_RUNS` times
    - base + patch + test, `VERDICT_RUNS` times
-   - base + patch + `PASS_TO_PASS` suite once; failing tests rerun 2 more times, a failure counts
-     only if it fails every time.
+   - `PASS_TO_PASS` suite once on base and once on base + patch. Only tests that passed on base
+     count (sandbox may lack network). Those failing on the PR rerun 2 more times; a regression
+     counts only if it fails every time. Empty `PASS_TO_PASS` → suite skipped.
 5. Verdict (pure):
    - base runs not all AssertionError failures → UNPROVEN
    - patch fails to apply → UNPROVEN
