@@ -163,3 +163,44 @@ def test_pg_store_gives_up_after_one_retry(run):
     pool = _FakePool(True, True)
     with pytest.raises(psycopg.OperationalError):
         run(db.PgRuns(pool).mark_running("r1"))
+
+
+SOURCE = {"repo": "octo/hello", "pr_number": 1}
+
+
+def test_pr_runs_keep_their_source_and_latest_per_pr(store, run):
+    async def go():
+        await store.create("a", "u1", "octo/hello#1", "github", T0, {**SOURCE, "head_sha": "s1"})
+        await store.create("b", "u1", "octo/hello#1", "github", T0 + timedelta(minutes=1), {**SOURCE, "head_sha": "s2"})
+        await store.finish("b", "done", EVIDENCE)
+        await store.set_check_run("b", 555)
+        return (await store.latest_for_prs("octo/hello", [1, 2]), await store.has_run_for_head("octo/hello", 1, "s1"),
+                await store.has_run_for_head("octo/hello", 1, "s3"), await store.get("b"))
+    latest, seen, unseen, row = run(go())
+    assert latest[1]["id"] == "b" and latest[1]["verdict"] == "PROVEN" and 2 not in latest and seen and not unseen
+    assert (row["repo"], row["pr_number"], row["head_sha"], row["check_run_id"]) == ("octo/hello", 1, "s2", 555)
+
+
+def test_installations_sync_per_user(store, run):
+    octo = {"id": 7, "account_login": "octo", "account_type": "User"}
+
+    async def go():
+        await store.sync_installations("u1", [octo])
+        await store.sync_installations("u2", [octo])
+        await store.sync_installations("u1", [])
+        return await store.user_installations("u1"), await store.user_installations("u2"), await store.installation_owner(7)
+    mine, theirs, owner = run(go())
+    assert mine == [] and [i["id"] for i in theirs] == [7] and owner == "u2"
+
+
+def test_auto_check_switch_and_installation_removal(store, run):
+    async def go():
+        await store.sync_installations("u1", [{"id": 7, "account_login": "octo", "account_type": "User"}])
+        await store.set_auto_check(42, 7, "octo/hello", True)
+        on = await store.auto_checks([42, 43])
+        await store.set_auto_check(42, 7, "octo/hello", False)
+        off = await store.auto_checks([42])
+        await store.set_auto_check(42, 7, "octo/hello", True)
+        await store.delete_installation(7)
+        return on, off, await store.auto_checks([42]), await store.user_installations("u1")
+    assert run(go()) == ({42}, set(), set(), [])

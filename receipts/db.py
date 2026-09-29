@@ -12,7 +12,7 @@ from psycopg_pool import AsyncConnectionPool
 from . import config
 
 SUMMARY_KEYS = ("id", "user_id", "instance_id", "pr", "status", "verdict", "reason", "seconds", "tokens",
-                "started_at", "finished_at")
+                "started_at", "finished_at", "repo", "pr_number", "head_sha", "check_run_id")
 SUMMARY = ", ".join(SUMMARY_KEYS)
 MIGRATIONS = config.ROOT / "migrations"
 ACTIVE = ("queued", "running")
@@ -76,11 +76,53 @@ class MemoryRuns:
 
     def __init__(self):
         self.rows: dict[str, dict] = {}
+        self.installations: dict[int, dict] = {}
+        self.installation_users: list[tuple[int, str]] = []  # in link order: the first is the owner
+        self.repo_settings: dict[int, dict] = {}
 
-    async def create(self, run_id, user_id, instance_id, pr, started_at=None):
+    async def create(self, run_id, user_id, instance_id, pr, started_at=None, source=None):
         self.rows[run_id] = {**dict.fromkeys(SUMMARY_KEYS), "id": run_id, "user_id": user_id,
                              "instance_id": instance_id, "pr": pr, "status": "queued",
-                             "started_at": started_at or _now(), "evidence": None}
+                             "started_at": started_at or _now(), "evidence": None, **(source or {})}
+
+    async def set_check_run(self, run_id, check_run_id):
+        self.rows[run_id]["check_run_id"] = check_run_id
+
+    async def has_run_for_head(self, repo, pr_number, head_sha):
+        return any((r["repo"], r["pr_number"], r["head_sha"]) == (repo, pr_number, head_sha) for r in self.rows.values())
+
+    async def latest_for_prs(self, repo, numbers):
+        latest = {}
+        for r in sorted(self.rows.values(), key=lambda r: r["started_at"]):
+            if r["repo"] == repo and r["pr_number"] in numbers:
+                latest[r["pr_number"]] = {k: r[k] for k in ("id", "status", "verdict")}
+        return latest
+
+    async def sync_installations(self, user_id, installations):
+        for i in installations:
+            self.installations[i["id"]] = {k: i[k] for k in ("id", "account_login", "account_type")}
+        keep = {i["id"] for i in installations}
+        self.installation_users = [(iid, uid) for iid, uid in self.installation_users if uid != user_id or iid in keep]
+        linked = {iid for iid, uid in self.installation_users if uid == user_id}
+        self.installation_users += [(iid, user_id) for iid in sorted(keep - linked)]
+
+    async def user_installations(self, user_id):
+        ids = {iid for iid, uid in self.installation_users if uid == user_id}
+        return sorted((dict(self.installations[i]) for i in ids), key=lambda i: i["account_login"])
+
+    async def installation_owner(self, installation_id):
+        return next((uid for iid, uid in self.installation_users if iid == installation_id), None)
+
+    async def delete_installation(self, installation_id):
+        self.installations.pop(installation_id, None)
+        self.installation_users = [(iid, uid) for iid, uid in self.installation_users if iid != installation_id]
+        self.repo_settings = {k: v for k, v in self.repo_settings.items() if v["installation_id"] != installation_id}
+
+    async def set_auto_check(self, repo_id, installation_id, full_name, enabled):
+        self.repo_settings[repo_id] = {"installation_id": installation_id, "full_name": full_name, "auto_check": enabled}
+
+    async def auto_checks(self, repo_ids):
+        return {r for r in repo_ids if self.repo_settings.get(r, {}).get("auto_check")}
 
     async def mark_running(self, run_id):
         self.rows[run_id]["status"] = "running"
@@ -144,10 +186,62 @@ class PgRuns:
     async def _all(self, sql, params=()):
         return await self._query(sql, params, lambda cur: cur.fetchall())
 
-    async def create(self, run_id, user_id, instance_id, pr, started_at=None):
-        await self._exec("INSERT INTO runs (id, user_id, instance_id, pr, status, started_at) "
-                         "VALUES (%s, %s, %s, %s, 'queued', coalesce(%s::timestamptz, now()))",
-                         (run_id, user_id, instance_id, pr, started_at))
+    async def create(self, run_id, user_id, instance_id, pr, started_at=None, source=None):
+        src = source or {}
+        await self._exec("INSERT INTO runs (id, user_id, instance_id, pr, status, started_at, repo, pr_number, "
+                         "head_sha) VALUES (%s, %s, %s, %s, 'queued', coalesce(%s::timestamptz, now()), %s, %s, %s)",
+                         (run_id, user_id, instance_id, pr, started_at, src.get("repo"), src.get("pr_number"),
+                          src.get("head_sha")))
+
+    async def set_check_run(self, run_id, check_run_id):
+        await self._exec("UPDATE runs SET check_run_id = %s WHERE id = %s", (check_run_id, run_id))
+
+    async def has_run_for_head(self, repo, pr_number, head_sha):
+        row = await self._one("SELECT 1 AS hit FROM runs WHERE repo = %s AND pr_number = %s AND head_sha = %s "
+                              "LIMIT 1", (repo, pr_number, head_sha))
+        return row is not None
+
+    async def latest_for_prs(self, repo, numbers):
+        rows = await self._all("SELECT DISTINCT ON (pr_number) pr_number, id, status, verdict FROM runs "
+                               "WHERE repo = %s AND pr_number = ANY(%s) ORDER BY pr_number, started_at DESC",
+                               (repo, list(numbers)))
+        return {r["pr_number"]: {k: r[k] for k in ("id", "status", "verdict")} for r in rows}
+
+    async def sync_installations(self, user_id, installations):
+        for i in installations:
+            await self._exec("INSERT INTO github_installations (id, account_login, account_type) VALUES (%s, %s, %s) "
+                             "ON CONFLICT (id) DO UPDATE SET account_login = EXCLUDED.account_login, "
+                             "account_type = EXCLUDED.account_type", (i["id"], i["account_login"], i["account_type"]))
+        ids = [i["id"] for i in installations]
+        await self._exec("DELETE FROM github_installation_users WHERE user_id = %s "
+                         "AND NOT (installation_id = ANY(%s))", (user_id, ids))
+        for iid in ids:
+            await self._exec("INSERT INTO github_installation_users (installation_id, user_id) VALUES (%s, %s) "
+                             "ON CONFLICT DO NOTHING", (iid, user_id))
+
+    async def user_installations(self, user_id):
+        return await self._all("SELECT i.id, i.account_login, i.account_type FROM github_installations i "
+                               "JOIN github_installation_users u ON u.installation_id = i.id "
+                               "WHERE u.user_id = %s ORDER BY i.account_login", (user_id,))
+
+    async def installation_owner(self, installation_id):
+        row = await self._one("SELECT user_id FROM github_installation_users WHERE installation_id = %s "
+                              "ORDER BY created_at LIMIT 1", (installation_id,))
+        return row["user_id"] if row else None
+
+    async def delete_installation(self, installation_id):
+        await self._exec("DELETE FROM github_installations WHERE id = %s", (installation_id,))
+
+    async def set_auto_check(self, repo_id, installation_id, full_name, enabled):
+        await self._exec("INSERT INTO github_repo_settings (repo_id, installation_id, full_name, auto_check) "
+                         "VALUES (%s, %s, %s, %s) ON CONFLICT (repo_id) DO UPDATE SET "
+                         "auto_check = EXCLUDED.auto_check, installation_id = EXCLUDED.installation_id, "
+                         "full_name = EXCLUDED.full_name", (repo_id, installation_id, full_name, enabled))
+
+    async def auto_checks(self, repo_ids):
+        rows = await self._all("SELECT repo_id FROM github_repo_settings WHERE auto_check AND repo_id = ANY(%s)",
+                               (list(repo_ids),))
+        return {r["repo_id"] for r in rows}
 
     async def mark_running(self, run_id):
         await self._exec("UPDATE runs SET status = 'running' WHERE id = %s", (run_id,))
@@ -182,7 +276,7 @@ class PgRuns:
 
     async def import_run(self, run_id, evidence):
         r = _imported(run_id, jsonb_safe(evidence))
-        await self._exec(f"INSERT INTO runs ({SUMMARY}, evidence) VALUES ({', '.join(['%s'] * 12)}) "
+        await self._exec(f"INSERT INTO runs ({SUMMARY}, evidence) VALUES ({', '.join(['%s'] * (len(SUMMARY_KEYS) + 1))}) "
                          "ON CONFLICT (id) DO NOTHING", (*(r[k] for k in SUMMARY_KEYS), Jsonb(r["evidence"])))
 
 
