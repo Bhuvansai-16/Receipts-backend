@@ -4,6 +4,4 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .superpowers/
-web/node_modules/
-web/dist/
 .cache/
