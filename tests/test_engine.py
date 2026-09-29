@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from receipts import engine
+from receipts import engine, swebench
 from receipts.sandbox import MARKER, TEST_ARGS
 from receipts.swebench import Instance
 
@@ -46,8 +46,9 @@ def fakes(monkeypatch):
     async def judge(*a):
         return engine.Judgement(faithful=True, reason="matches issue")
 
-    for name, fn in [("classify", classify), ("base_image", base_image), ("write_test", write_test), ("judge", judge)]:
+    for name, fn in [("classify", classify), ("write_test", write_test), ("judge", judge)]:
         monkeypatch.setattr(engine, name, fn)
+    monkeypatch.setattr(swebench, "base_image", base_image)  # Instance.base_image() goes through it
     monkeypatch.setattr(engine.config, "contree", lambda: None)
 
 

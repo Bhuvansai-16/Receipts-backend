@@ -21,6 +21,9 @@ class Instance:
     gold_patch: str
     pass_to_pass: list[str]
 
+    async def base_image(self):
+        return await base_image(self.instance_id)
+
 
 CACHE = config.ROOT / ".cache" / "swebench_verified.json"
 

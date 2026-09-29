@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from . import config
 from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
-from .swebench import Instance, base_image
+from .swebench import Instance
 from .verdict import PytestRun, Verdict, fix_verdict, restrict, suite_candidates
 from .writer import write_test
 
@@ -153,7 +153,7 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     if claim.kind != "fix":
         return Verdict.NO_CHECKABLE_CLAIM, f"classified as '{claim.kind}': nothing to check"
 
-    base = await base_image(inst.instance_id)
+    base = await inst.base_image()
     say("env_ready")
     w = await write_test(inst.problem_statement, base, say)
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
@@ -165,7 +165,8 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     test = {TEST_PATH: w.test_code.encode()}
     pr = base if patch is None else await apply_patch(base, patch)
     n, p2p = config.VERDICT_RUNS, inst.pass_to_pass
-    files = suite_files(p2p)  # by file: one PASS_TO_PASS id missing at base would abort a nodeid run
+    # by file: one PASS_TO_PASS id missing at base would abort a nodeid run. Real repos name files directly.
+    files = getattr(inst, "suite", None) or suite_files(p2p)
     async def fork(side: str, image, i: int) -> PytestRun:
         run = await run_pytest(image, TEST_ARGS, test)
         failing = [r.msg for r in run.results.values() if r.outcome != "passed"]
@@ -180,7 +181,7 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     res = await asyncio.gather(*jobs)
     base_runs = res[0]
     pr_runs = res[1] if pr is not None else None
-    base_suites, pr_suites = ([restrict(res[2], p2p)], [res[3]]) if len(res) == 4 else (None, None)
+    base_suites, pr_suites = ([restrict(res[2], p2p) if p2p else res[2]], [res[3]]) if len(res) == 4 else (None, None)
     if base_suites is not None:
         cands = suite_candidates(base_suites[0], pr_suites[0])
         if cands:  # rerun what looks broken on both sides at once, to rule out flakes and outages

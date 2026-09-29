@@ -35,6 +35,20 @@ COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "") or None  # e.g. ".example.co
 MAX_ACTIVE_RUNS = int(os.environ.get("MAX_ACTIVE_RUNS", "2"))
 RUNS_PER_DAY = int(os.environ.get("RUNS_PER_DAY", "20"))
 
+# GitHub App (github.com > Settings > Developer settings > GitHub Apps); see README "GitHub App"
+API_URL = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")  # setup redirect + check links
+GITHUB_APP_ID = os.environ.get("GITHUB_APP_ID", "")
+GITHUB_APP_SLUG = os.environ.get("GITHUB_APP_SLUG", "")  # github.com/apps/<slug>
+GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
+
+
+def github_private_key() -> str:
+    """PEM from GITHUB_APP_PRIVATE_KEY (newlines escaped as \\n) or the file at GITHUB_APP_PRIVATE_KEY_PATH."""
+    if key := os.environ.get("GITHUB_APP_PRIVATE_KEY"):
+        return key.replace("\\n", "\n")
+    path = os.environ.get("GITHUB_APP_PRIVATE_KEY_PATH")
+    return Path(path).read_text(encoding="utf-8") if path else ""
+
 
 def llm(role: str):
     from langchain_openai import ChatOpenAI
