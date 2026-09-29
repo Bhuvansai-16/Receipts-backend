@@ -55,7 +55,9 @@ async def lifespan(app: FastAPI):
     # Loading SWE-bench takes ~15 s (it also checks the HF hub); do it now so the issue picker is instant.
     warmup = asyncio.get_running_loop().run_in_executor(None, _instances)
     pool = await db.open_pool(config.DATABASE_URL) if config.DATABASE_URL else None
-    app.state.runs = db.PgRuns(pool) if pool else db.MemoryRuns()  # ponytail: no DATABASE_URL = nothing persists
+    app.state.runs = db.PgRuns(pool) if pool else db.MemoryRuns()
+    if pool is None:  # ponytail: no DATABASE_URL = runs in memory, seeded from runs/*.json; new ones don't persist
+        await db.import_runs(app.state.runs, config.RUNS_DIR)
     await app.state.runs.fail_unfinished()  # their tasks died with the previous process
     yield
     warmup.cancel()

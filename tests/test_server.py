@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -19,9 +20,10 @@ T0 = datetime(2026, 9, 29, tzinfo=timezone.utc)
 
 
 @pytest.fixture
-def api(monkeypatch):
+def api(monkeypatch, tmp_path):
     monkeypatch.setattr(swebench, "_dataset", lambda: ROWS)
     monkeypatch.setattr(config, "DATABASE_URL", "")
+    monkeypatch.setattr(config, "RUNS_DIR", tmp_path)
     server._instances.cache_clear()
     server.LIVE.clear()
     seen = {}
@@ -183,8 +185,9 @@ def test_finished_run_without_stored_events_replays_done(api):
     assert sse_types(api, "psf__requests-1-gold-20260101-000000") == ["done"]
 
 
-def test_unfinished_runs_fail_on_startup(monkeypatch):
+def test_unfinished_runs_fail_on_startup(monkeypatch, tmp_path):
     store = db.MemoryRuns()
+    monkeypatch.setattr(config, "RUNS_DIR", tmp_path)
     asyncio.run(store.create("stuck", "u1", "psf__requests-1", "gold"))
     monkeypatch.setattr(swebench, "_dataset", lambda: ROWS)
     monkeypatch.setattr(config, "DATABASE_URL", "")
@@ -209,3 +212,15 @@ def test_cors_allows_the_header_neons_client_sends(api):
         "origin": config.FRONTEND_URL, "access-control-request-method": "GET",
         "access-control-request-headers": "content-type,x-neon-client-info"})
     assert r.status_code == 200 and "x-neon-client-info" in r.headers["access-control-allow-headers"].lower()
+
+
+def test_without_a_database_saved_runs_are_served(monkeypatch, tmp_path):
+    (tmp_path / "psf__requests-1-gold-20260101-000000.json").write_text(json.dumps({
+        "instance_id": "psf__requests-1", "verdict": "PROVEN", "started_at": "2026-01-01T00:00:00+00:00"}),
+        encoding="utf-8")
+    monkeypatch.setattr(swebench, "_dataset", lambda: ROWS)
+    monkeypatch.setattr(config, "DATABASE_URL", "")
+    monkeypatch.setattr(config, "RUNS_DIR", tmp_path)
+    with TestClient(server.app) as c:
+        got = c.get("/api/runs/psf__requests-1-gold-20260101-000000").json()
+    assert got["status"] == "done" and got["evidence"]["verdict"] == "PROVEN"

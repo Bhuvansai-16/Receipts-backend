@@ -26,7 +26,7 @@ python -m receipts import-runs   # optional: publish runs/*.json as example rece
 python -m receipts serve         # http://127.0.0.1:8000
 ```
 
-Without `DATABASE_URL` the API still starts, but keeps runs in memory only.
+Without `DATABASE_URL` the API still starts: it keeps runs in memory, starting from the saved ones in `runs/`.
 
 ## Sign-in and database (Neon)
 
