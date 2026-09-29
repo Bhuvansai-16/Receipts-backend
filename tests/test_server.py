@@ -83,7 +83,9 @@ def test_starting_a_check_needs_sign_in(api):
 
 
 def test_me_returns_the_public_profile_only(api):
-    assert signed_in(api).get("/api/me").json() == {"id": "u1", "email": "a@b.c", "name": "A", "image": None}
+    body = signed_in(api).get("/api/me").json()
+    assert body.pop("usage")["per_day"] == config.RUNS_PER_DAY
+    assert body == {"id": "u1", "email": "a@b.c", "name": "A", "image": None}  # no emailVerified etc.
 
 
 def test_run_streams_then_is_stored_for_its_owner(api):
