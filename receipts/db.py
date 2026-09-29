@@ -23,6 +23,17 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def jsonb_safe(value):
+    """Postgres text and jsonb can't hold NUL characters (tool output sometimes has them): drop them."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {jsonb_safe(k): jsonb_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [jsonb_safe(v) for v in value]
+    return value
+
+
 def result_columns(evidence: dict) -> dict:
     tokens = sum(int(u.get("total_tokens") or 0) for u in (evidence.get("tokens") or {}).values())
     return {"verdict": evidence.get("verdict"), "reason": evidence.get("reason"),
@@ -129,6 +140,7 @@ class PgRuns:
         await self._exec("UPDATE runs SET status = 'running' WHERE id = %s", (run_id,))
 
     async def finish(self, run_id, status, evidence):
+        evidence = jsonb_safe(evidence)
         c = result_columns(evidence)
         await self._exec("UPDATE runs SET status = %s, verdict = %s, reason = %s, seconds = %s, tokens = %s, "
                          "evidence = %s, finished_at = now() WHERE id = %s",
@@ -156,9 +168,9 @@ class PgRuns:
                                 "WHERE status IN ('queued', 'running')", (RESTARTED,))
 
     async def import_run(self, run_id, evidence):
-        r = _imported(run_id, evidence)
+        r = _imported(run_id, jsonb_safe(evidence))
         await self._exec(f"INSERT INTO runs ({SUMMARY}, evidence) VALUES ({', '.join(['%s'] * 12)}) "
-                         "ON CONFLICT (id) DO NOTHING", (*(r[k] for k in SUMMARY_KEYS), Jsonb(evidence)))
+                         "ON CONFLICT (id) DO NOTHING", (*(r[k] for k in SUMMARY_KEYS), Jsonb(r["evidence"])))
 
 
 async def open_pool(url: str) -> AsyncConnectionPool:

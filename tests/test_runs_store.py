@@ -120,3 +120,9 @@ def test_import_runs_skips_unreadable_files(tmp_path, run):
     (tmp_path / "x__y-1-gold-20260928-201414.json").write_text(json.dumps(EVIDENCE), encoding="utf-8")
     (tmp_path / "x__y-1-gold-20260928-201500.json").write_text('{"instance_id": "x__y-1", "verd', encoding="utf-8")
     assert run(db.import_runs(db.MemoryRuns(), tmp_path)) == 1
+
+
+def test_jsonb_safe_strips_nul_characters_postgres_rejects():
+    literal = r"C:\u0000dir"  # the six characters \u0000 in text are fine; only a real NUL is not
+    ev = {"log": [{"output": "a\x00b"}], "k\x00": "x", "n": 1, "path": literal}
+    assert db.jsonb_safe(ev) == {"log": [{"output": "ab"}], "k": "x", "n": 1, "path": literal}
