@@ -224,3 +224,7 @@ def test_without_a_database_saved_runs_are_served(monkeypatch, tmp_path):
     with TestClient(server.app) as c:
         got = c.get("/api/runs/psf__requests-1-gold-20260101-000000").json()
     assert got["status"] == "done" and got["evidence"]["verdict"] == "PROVEN"
+
+
+def test_github_repos_are_served_and_need_sign_in(api):
+    assert api.get("/api/github/repos").status_code == 401

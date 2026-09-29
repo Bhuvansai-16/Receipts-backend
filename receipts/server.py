@@ -18,7 +18,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from . import auth, config, db, engine, swebench
+from . import auth, config, db, engine, github, swebench
 
 MAX_DIFF_BYTES = 200_000
 MAX_CONCURRENT_CHECKS = 2  # whole server: Daytona quota + Token Factory credit
@@ -72,6 +72,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Receipts API", lifespan=lifespan)
 app.include_router(auth.router)
+app.include_router(github.router)
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # leaves text/event-stream alone
 # Neon's auth client adds x-neon-client-info to every request, so preflights must allow it.
 app.add_middleware(CORSMiddleware, allow_origins=[config.FRONTEND_URL], allow_credentials=True,

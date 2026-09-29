@@ -5,6 +5,7 @@ forwarded headers, the same cookie rewriting and the same OAuth session-verifier
 only ever talks to this API and every auth cookie is first-party. Docs: https://neon.com/docs/auth/overview
 """
 import hashlib
+import json
 import re
 import time
 from http.cookiejar import CookieJar, DefaultCookiePolicy
@@ -152,6 +153,22 @@ async def current_user(request: Request) -> dict:
         raise HTTPException(401, "Sign in to continue.")
     sessions.put(cookies, user)
     return user
+
+
+async def provider_token(request: Request, provider: str) -> str | None:
+    """The signed-in user's OAuth access token for `provider` (e.g. "github") from Better Auth's
+    get-access-token, which refreshes an expired token first. None when they have no such account."""
+    upstream = await _call("POST", "get-access-token", query="", body=json.dumps({"providerId": provider}).encode(),
+                           headers={"cookie": neon_cookies(request.headers.get("cookie", "")),
+                                    "origin": config.FRONTEND_URL, "content-type": "application/json",
+                                    "x-neon-auth-middleware": "true"})
+    if upstream.status_code == 401:
+        raise HTTPException(401, "Sign in to continue.")
+    try:
+        body = upstream.json() if upstream.status_code == 200 else None
+    except ValueError:
+        body = None
+    return (body.get("accessToken") if isinstance(body, dict) else None) or None
 
 
 @router.get("/complete")
