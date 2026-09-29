@@ -190,8 +190,11 @@ async def import_runs(store, runs_dir: Path) -> int:
     """Load finished runs saved by the CLI (runs/*.json) as public example receipts (no owner)."""
     count = 0
     for path in sorted(runs_dir.glob("*.json")):
-        evidence = json.loads(path.read_text(encoding="utf-8"))
-        if evidence.get("instance_id") and evidence.get("verdict"):
+        try:
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:  # a half-written file must not stop the API from starting
+            continue
+        if isinstance(evidence, dict) and evidence.get("instance_id") and evidence.get("verdict"):
             await store.import_run(path.stem, evidence)
             count += 1
     return count

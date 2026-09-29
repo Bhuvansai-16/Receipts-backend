@@ -114,3 +114,9 @@ def test_import_runs_skips_files_without_a_verdict(tmp_path, run):
     (tmp_path / "x__y-1-gold-20260928-201414.json").write_text(json.dumps(EVIDENCE), encoding="utf-8")
     (tmp_path / "broken-20260928-201414.json").write_text("{}", encoding="utf-8")
     assert run(db.import_runs(db.MemoryRuns(), tmp_path)) == 1
+
+
+def test_import_runs_skips_unreadable_files(tmp_path, run):
+    (tmp_path / "x__y-1-gold-20260928-201414.json").write_text(json.dumps(EVIDENCE), encoding="utf-8")
+    (tmp_path / "x__y-1-gold-20260928-201500.json").write_text('{"instance_id": "x__y-1", "verd', encoding="utf-8")
+    assert run(db.import_runs(db.MemoryRuns(), tmp_path)) == 1
