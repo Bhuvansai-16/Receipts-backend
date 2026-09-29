@@ -43,7 +43,8 @@ Without `DATABASE_URL` the API still starts: it keeps runs in memory, starting f
 
 The browser never talks to Neon directly: `/api/auth/*` proxies Neon Auth the way Neon's own server SDK does
 and rewrites its cookies to `HttpOnly; Secure; SameSite=Lax`. Other endpoints: `/api/me`, `/api/runs` (your
-runs, newest first, paged), `/api/runs/{id}` and `/api/runs/{id}/events` (public receipts), `/api/health`.
+runs, newest first, paged), `/api/runs/{id}` and `/api/runs/{id}/events` (public receipts), `/api/github/repos` (the
+signed-in user's public GitHub repositories, read with their GitHub sign-in token on the server), `/api/health`.
 
 ## Sandbox provider
 
