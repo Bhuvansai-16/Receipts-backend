@@ -26,6 +26,16 @@ MAX_TEST_ATTEMPTS = int(os.environ.get("MAX_TEST_ATTEMPTS", "5"))
 VERDICT_RUNS = int(os.environ.get("VERDICT_RUNS", "3"))
 RUNS_DIR = ROOT / "runs"
 
+# Neon: pooled URL for the app, direct (unpooled) URL for migrations (neon.com/docs/connect/connection-pooling)
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+DATABASE_URL_UNPOOLED = os.environ.get("DATABASE_URL_UNPOOLED", "") or DATABASE_URL
+NEON_AUTH_URL = os.environ.get("NEON_AUTH_URL", "").rstrip("/")  # Neon Console > Auth > Configuration
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+API_URL = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")
+COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "") or None  # e.g. ".example.com" for app. + api. subdomains
+MAX_ACTIVE_RUNS = int(os.environ.get("MAX_ACTIVE_RUNS", "2"))
+RUNS_PER_DAY = int(os.environ.get("RUNS_PER_DAY", "20"))
+
 
 def llm(role: str):
     from langchain_openai import ChatOpenAI

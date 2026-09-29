@@ -1,5 +1,5 @@
 """CLI.  python -m receipts smoke [--instance ID]  |  python -m receipts serve [--port 8000]
-         python -m receipts run INSTANCE_ID [--patch gold|none|FILE]"""
+         python -m receipts run INSTANCE_ID [--patch gold|none|FILE]  |  python -m receipts migrate | import-runs"""
 import argparse
 import asyncio
 import sys
@@ -43,6 +43,21 @@ async def _closing(coro):
             await client().close()
 
 
+def _run_async(coro):
+    """psycopg's async mode needs a selector event loop on Windows."""
+    return asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop if sys.platform == "win32" else None)
+
+
+async def _import_runs() -> int:
+    from . import db
+
+    pool = await db.open_pool(config.DATABASE_URL)
+    try:
+        return await db.import_runs(db.PgRuns(pool), config.RUNS_DIR)
+    finally:
+        await pool.close()
+
+
 def load_patch(arg: str, gold: str) -> tuple[str | None, str]:
     """--patch value -> (patch text or None for a no-op PR, label for the evidence filename)."""
     if arg in ("gold", "none"):
@@ -61,9 +76,20 @@ def main() -> None:
     r.add_argument("--patch", default="gold", help="gold | none | path to a .diff file")
     v = sub.add_parser("serve", help="web UI + API (build the UI first: cd web && npm run build)")
     v.add_argument("--port", type=int, default=8000)
+    sub.add_parser("migrate", help="apply database migrations (uses DATABASE_URL_UNPOOLED)")
+    sub.add_parser("import-runs", help="load runs/*.json into the database as public example receipts")
     a = ap.parse_args()
     if a.cmd == "smoke":
         return asyncio.run(_closing(smoke(a.instance)))
+    if a.cmd in ("migrate", "import-runs"):
+        if not config.DATABASE_URL:
+            sys.exit("error: set DATABASE_URL (and DATABASE_URL_UNPOOLED) in .env first")
+        if a.cmd == "migrate":
+            from . import db
+
+            applied = _run_async(db.migrate(config.DATABASE_URL_UNPOOLED))
+            return print(f"applied: {', '.join(applied) or 'nothing new'}")
+        return print(f"imported {_run_async(_import_runs())} runs")
     if a.cmd == "serve":
         import uvicorn
 
