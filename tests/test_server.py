@@ -202,3 +202,10 @@ def test_cors_allows_only_the_frontend(api):
     assert ok.headers.get("access-control-allow-credentials") == "true"
     bad = api.options("/api/runs", headers={"origin": "https://evil.com", "access-control-request-method": "POST"})
     assert bad.headers.get("access-control-allow-origin") is None
+
+
+def test_cors_allows_the_header_neons_client_sends(api):
+    r = api.options("/api/auth/get-session", headers={
+        "origin": config.FRONTEND_URL, "access-control-request-method": "GET",
+        "access-control-request-headers": "content-type,x-neon-client-info"})
+    assert r.status_code == 200 and "x-neon-client-info" in r.headers["access-control-allow-headers"].lower()

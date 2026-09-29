@@ -71,8 +71,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Receipts API", lifespan=lifespan)
 app.include_router(auth.router)
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # leaves text/event-stream alone
+# Neon's auth client adds x-neon-client-info to every request, so preflights must allow it.
 app.add_middleware(CORSMiddleware, allow_origins=[config.FRONTEND_URL], allow_credentials=True,
-                   allow_methods=["GET", "POST"], allow_headers=["content-type", "authorization"])
+                   allow_methods=["GET", "POST"], allow_headers=["content-type", "authorization", "x-neon-client-info"])
 
 
 def runs_store(request: Request):
