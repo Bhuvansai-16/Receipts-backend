@@ -6,8 +6,7 @@ import asyncio
 import hashlib
 import json
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from functools import lru_cache
 from typing import Literal
 
@@ -18,36 +17,16 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from . import auth, config, db, engine, github, swebench
+from . import auth, checks, config, db, engine, github, swebench
+from .checks import LIVE
 
 MAX_DIFF_BYTES = 200_000
-MAX_CONCURRENT_CHECKS = 2  # whole server: Daytona quota + Token Factory credit
 
 
 class RunRequest(BaseModel):
     instance_id: str
     pr: Literal["gold", "none", "diff"]
     diff: str | None = None
-
-
-@dataclass
-class LiveRun:
-    """Progress of a run while it is active; once finished, the stored evidence takes over."""
-
-    id: str
-    events: list[dict] = field(default_factory=list)
-    listeners: set = field(default_factory=set)
-
-    def publish(self, type_: str, data: dict) -> None:
-        event = {"type": type_, "data": data}
-        self.events.append(event)
-        for queue in self.listeners:
-            queue.put_nowait(event)
-
-
-LIVE: dict[str, LiveRun] = {}
-_tasks: set[asyncio.Task] = set()
-_slots: asyncio.Semaphore | None = None
 
 
 @asynccontextmanager
@@ -76,7 +55,7 @@ app.include_router(github.router)
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # leaves text/event-stream alone
 # Neon's auth client adds x-neon-client-info to every request, so preflights must allow it.
 app.add_middleware(CORSMiddleware, allow_origins=[config.FRONTEND_URL], allow_credentials=True,
-                   allow_methods=["GET", "POST"], allow_headers=["content-type", "authorization", "x-neon-client-info"])
+                   allow_methods=["GET", "POST", "PUT"], allow_headers=["content-type", "authorization", "x-neon-client-info"])
 
 
 def runs_store(request: Request):
@@ -134,8 +113,11 @@ def get_instance(instance_id: str, request: Request) -> Response:
 
 
 @app.get("/api/me")
-async def me(user: dict = Depends(auth.current_user)) -> dict:
-    return {key: user.get(key) for key in ("id", "email", "name", "image")}
+async def me(user: dict = Depends(auth.current_user), runs=Depends(runs_store)) -> dict:
+    active, today = await checks.usage(runs, user["id"])
+    return {**{key: user.get(key) for key in ("id", "email", "name", "image")},
+            "usage": {"active": active, "today": today, "max_active": config.MAX_ACTIVE_RUNS,
+                      "per_day": config.RUNS_PER_DAY}}
 
 
 @app.post("/api/runs", status_code=202)
@@ -146,41 +128,14 @@ async def start_run(req: RunRequest, user: dict = Depends(auth.current_user), ru
             raise HTTPException(422, "Paste a unified diff, or pick the real fix or a do-nothing PR.")
         if len(req.diff.encode()) > MAX_DIFF_BYTES:
             raise HTTPException(413, f"Diff is larger than {MAX_DIFF_BYTES // 1000} KB.")
-    # ponytail: check-then-insert; two simultaneous clicks can both pass. Fine for a cost guard.
-    active, recent = await runs.usage(user["id"], datetime.now(timezone.utc) - timedelta(days=1))
-    if active >= config.MAX_ACTIVE_RUNS:
-        raise HTTPException(429, f"You already have {active} checks running. Start another when one finishes.")
-    if recent >= config.RUNS_PER_DAY:
-        raise HTTPException(429, f"Daily limit reached ({config.RUNS_PER_DAY} checks in 24 hours). Try again later.")
+    await checks.enforce_limits(runs, user["id"])
     patch = {"gold": inst.gold_patch, "none": None, "diff": req.diff}[req.pr]
+
+    async def prepare():
+        return inst, patch
+
     run_id = engine.new_run_id(inst.instance_id, req.pr, taken=LIVE)
-    await runs.create(run_id, user["id"], inst.instance_id, req.pr)
-    live = LIVE[run_id] = LiveRun(run_id)
-    task = asyncio.create_task(_execute(live, inst, patch, runs))
-    _tasks.add(task)
-    task.add_done_callback(_tasks.discard)
-    return {"run_id": run_id}
-
-
-async def _execute(live: LiveRun, inst: swebench.Instance, patch: str | None, runs) -> None:
-    global _slots
-    _slots = _slots or asyncio.Semaphore(MAX_CONCURRENT_CHECKS)
-    status, evidence = "error", {"instance_id": inst.instance_id, "reason": "the check failed to run"}
-    try:
-        async with _slots:
-            await runs.mark_running(live.id)
-            live.publish("status", {"status": "running"})
-            # "done" is sent below, after the evidence is stored, so clients never read a half-written run
-            evidence = await engine.check(inst, patch, emit=lambda t, d: t != "done" and live.publish(t, d))
-            status = "done"
-    except Exception as e:  # engine.check never raises by design; the sandbox or database can
-        live.publish("error", {"message": f"{type(e).__name__}: {e}"})
-    finally:
-        try:  # store what the viewers saw, so a replay equals the live stream
-            await runs.finish(live.id, status, {**evidence, "run_id": live.id, "events": live.events})
-        finally:
-            live.publish("done", {})
-            LIVE.pop(live.id, None)
+    return {"run_id": await checks.launch(runs, user["id"], run_id, inst.instance_id, req.pr, prepare)}
 
 
 @app.get("/api/runs")
