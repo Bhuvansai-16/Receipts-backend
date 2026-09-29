@@ -23,7 +23,7 @@ it without signing in.
 ```bash
 python -m receipts migrate       # once, and after new files in migrations/
 python -m receipts import-runs   # optional: publish runs/*.json as example receipts
-python -m receipts serve         # http://127.0.0.1:8000
+python -m receipts serve         # http://localhost:8000
 ```
 
 Without `DATABASE_URL` the API still starts: it keeps runs in memory, starting from the saved ones in `runs/`.

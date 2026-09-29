@@ -47,4 +47,4 @@ def test_serve_uses_a_selector_loop_on_windows(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(sys, "argv", ["receipts", "serve", "--port", "8123"])
     cli.main()
-    assert seen == {"app": "receipts.server:app", "host": "127.0.0.1", "port": 8123, "loop": "asyncio:SelectorEventLoop"}
+    assert seen == {"app": "receipts.server:app", "host": "localhost", "port": 8123, "loop": "asyncio:SelectorEventLoop"}

@@ -119,17 +119,30 @@ class PgRuns:
     def __init__(self, pool: AsyncConnectionPool):
         self.pool = pool
 
+    async def _query(self, sql, params, fetch):
+        for retry in (False, True):
+            try:
+                async with self.pool.connection() as conn:
+                    cur = await conn.execute(sql, params)
+                    return await fetch(cur)
+            except psycopg.OperationalError:
+                if retry:
+                    raise
+                # Neon suspends an idle compute and drops its connections: discard the dead ones, try once more.
+                # Safe to repeat: a statement on a dropped connection never ran (autocommit, one statement each).
+                await self.pool.check()
+
     async def _exec(self, sql, params=()) -> int:
-        async with self.pool.connection() as conn:
-            return (await conn.execute(sql, params)).rowcount
+        async def rowcount(cur):
+            return cur.rowcount
+
+        return await self._query(sql, params, rowcount)
 
     async def _one(self, sql, params=()):
-        async with self.pool.connection() as conn:
-            return await (await conn.execute(sql, params)).fetchone()
+        return await self._query(sql, params, lambda cur: cur.fetchone())
 
     async def _all(self, sql, params=()):
-        async with self.pool.connection() as conn:
-            return await (await conn.execute(sql, params)).fetchall()
+        return await self._query(sql, params, lambda cur: cur.fetchall())
 
     async def create(self, run_id, user_id, instance_id, pr, started_at=None):
         await self._exec("INSERT INTO runs (id, user_id, instance_id, pr, status, started_at) "
@@ -174,9 +187,9 @@ class PgRuns:
 
 
 async def open_pool(url: str) -> AsyncConnectionPool:
-    # check_connection: Neon scales idle computes to zero and drops their connections; test before handing one out.
-    pool = AsyncConnectionPool(url, min_size=1, max_size=10, open=False, kwargs={"row_factory": dict_row},
-                               check=AsyncConnectionPool.check_connection)
+    # autocommit: every call is one statement, so no BEGIN/COMMIT round trips (each costs ~0.35 s to us-east-2)
+    pool = AsyncConnectionPool(url, min_size=1, max_size=10, open=False,
+                               kwargs={"row_factory": dict_row, "autocommit": True})
     await pool.open(wait=True, timeout=30)  # a suspended compute takes a few seconds to wake
     return pool
 

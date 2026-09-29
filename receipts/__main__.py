@@ -95,7 +95,7 @@ def main() -> None:
 
         # psycopg's async pool needs a selector event loop; uvicorn defaults to Proactor on Windows
         loop = "asyncio:SelectorEventLoop" if sys.platform == "win32" else "auto"
-        return uvicorn.run("receipts.server:app", host="127.0.0.1", port=a.port, loop=loop)
+        return uvicorn.run("receipts.server:app", host="localhost", port=a.port, loop=loop)
 
     from .engine import check, new_run_id, save_evidence
     from .swebench import load_instance

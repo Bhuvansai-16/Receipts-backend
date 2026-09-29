@@ -1,9 +1,12 @@
 import asyncio
+import contextlib
 import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
+import psycopg
 import pytest
 
 from receipts import db
@@ -126,3 +129,37 @@ def test_jsonb_safe_strips_nul_characters_postgres_rejects():
     literal = r"C:\u0000dir"  # the six characters \u0000 in text are fine; only a real NUL is not
     ev = {"log": [{"output": "a\x00b"}], "k\x00": "x", "n": 1, "path": literal}
     assert db.jsonb_safe(ev) == {"log": [{"output": "ab"}], "k": "x", "n": 1, "path": literal}
+
+
+class _FakePool:
+    """Stands in for the psycopg pool: hands out connections whose execute() fails or succeeds in order."""
+
+    def __init__(self, *fails):
+        self.fails, self.checks = list(fails), 0
+
+    @contextlib.asynccontextmanager
+    async def connection(self):
+        fail = self.fails.pop(0)
+
+        class Conn:
+            async def execute(self, sql, params=()):
+                if fail:
+                    raise psycopg.OperationalError("server closed the connection unexpectedly")
+                return SimpleNamespace(rowcount=1)
+
+        yield Conn()
+
+    async def check(self):
+        self.checks += 1
+
+
+def test_pg_store_retries_once_when_neon_dropped_an_idle_connection(run):
+    pool = _FakePool(True, False)
+    run(db.PgRuns(pool).mark_running("r1"))
+    assert pool.checks == 1 and pool.fails == []
+
+
+def test_pg_store_gives_up_after_one_retry(run):
+    pool = _FakePool(True, True)
+    with pytest.raises(psycopg.OperationalError):
+        run(db.PgRuns(pool).mark_running("r1"))
