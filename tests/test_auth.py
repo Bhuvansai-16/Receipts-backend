@@ -169,3 +169,20 @@ def test_current_user_is_cached_and_sign_out_clears_it(client, upstream):
     client.post("/api/auth/sign-out", json={}, headers={"cookie": SESSION})
     client.get("/me", headers={"cookie": SESSION})
     assert len(upstream.calls) == 3  # sign-out forwarded, then a fresh lookup
+
+
+def test_rewrite_set_cookie_always_uses_the_root_path():
+    """One Path for every auth cookie, so a new cookie replaces the old one instead of sitting beside it."""
+    for header in (f"{SESSION}; Path=/neondb/auth; HttpOnly", f"{SESSION}; HttpOnly"):
+        parts = [p.strip() for p in auth.rewrite_set_cookie(header).split(";")]
+        assert [p for p in parts if p.lower().startswith("path=")] == ["Path=/"]
+
+
+def test_duplicate_cookies_forward_the_last_and_clear_stale_paths(client, upstream):
+    """Browsers that kept an auth cookie under another path send both; Neon then reads the stale one."""
+    stale, fresh = "__Secure-neon-auth.session_token=old", "__Secure-neon-auth.session_token=new"
+    r = client.get("/api/auth/get-session", headers={"cookie": f"{stale}; {fresh}"})
+    assert upstream.calls[0].headers["cookie"] == fresh
+    deletions = [c for c in r.headers.get_list("set-cookie") if "Max-Age=0" in c]
+    assert all(c.startswith("__Secure-neon-auth.session_token=;") for c in deletions)
+    assert {c.split("Path=")[1].split(";")[0] for c in deletions} == {"/api/auth", "/api"}

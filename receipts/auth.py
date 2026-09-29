@@ -6,6 +6,7 @@ only ever talks to this API and every auth cookie is first-party. Docs: https://
 """
 import hashlib
 import json
+import logging
 import re
 import time
 from http.cookiejar import CookieJar, DefaultCookiePolicy
@@ -27,8 +28,10 @@ FORWARD_RESPONSE_HEADERS = ("content-type", "date", "set-auth-jwt", "set-auth-to
 AUTH_PATH = re.compile(r"[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*")  # no dots: nothing like ../ reaches upstream
 ERROR_CODES = {502: "AUTH_UNAVAILABLE", 503: "AUTH_NOT_CONFIGURED"}
 SESSION_TTL_S = 60
+STALE_PATHS = ("/api/auth", "/api")  # where an auth cookie set without Path used to land
 
 router = APIRouter(prefix="/api/auth")
+log = logging.getLogger("uvicorn.error")  # uvicorn prints this logger at INFO
 _client: httpx.AsyncClient | None = None
 
 
@@ -53,18 +56,33 @@ async def close() -> None:
         _client = None
 
 
-def neon_cookies(cookie_header: str) -> str:
-    """Only Neon Auth cookies travel upstream."""
+def _neon_pairs(cookie_header: str) -> list[str]:
     pairs = (p.strip() for p in cookie_header.split(";"))
-    return "; ".join(p for p in pairs if p.startswith(COOKIE_PREFIX) and "=" in p)
+    return [p for p in pairs if p.startswith(COOKIE_PREFIX) and "=" in p]
+
+
+def neon_cookies(cookie_header: str) -> str:
+    """Only Neon Auth cookies travel upstream, one per name. A browser holding the same name under two paths
+    sends the longer path first; the root-path one (where we set them) comes last, so the last one wins."""
+    latest = {pair.split("=", 1)[0]: pair for pair in _neon_pairs(cookie_header)}
+    return "; ".join(latest.values())
+
+
+def stale_cookie_deletions(cookie_header: str) -> list[str]:
+    """Set-Cookies that delete duplicates stuck under the paths a cookie without Path used to land on."""
+    names = [pair.split("=", 1)[0] for pair in _neon_pairs(cookie_header)]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    return [f"{name}=; Path={path}; Max-Age=0; HttpOnly; Secure; SameSite=Lax"
+            for name in duplicates for path in STALE_PATHS]
 
 
 def rewrite_set_cookie(header: str, domain: str | None = None) -> str:
-    """Make an upstream cookie first-party: no Partitioned, no upstream Domain, always Secure + HttpOnly, Lax."""
+    """Make an upstream cookie first-party: no Partitioned, no upstream Domain, always Secure + HttpOnly, Lax,
+    and always Path=/ so each cookie name exists once (a cookie without Path would stick to /api/auth)."""
     name_value, *attrs = (part.strip() for part in header.split(";"))
-    drop = {"partitioned", "secure", "httponly", "samesite", "domain"}
+    drop = {"partitioned", "secure", "httponly", "samesite", "domain", "path"}
     kept = [a for a in attrs if a and a.split("=", 1)[0].strip().lower() not in drop]
-    return "; ".join([name_value, *kept, "HttpOnly", "Secure", "SameSite=Lax",
+    return "; ".join([name_value, "Path=/", *kept, "HttpOnly", "Secure", "SameSite=Lax",
                       *([f"Domain={domain}"] if domain else [])])
 
 
@@ -102,7 +120,24 @@ async def _call(method: str, path: str, *, query: str, headers: dict, body: byte
         raise HTTPException(502, "Couldn't reach the sign-in service. Try again in a moment.") from e
 
 
-def _copy_cookies(upstream: httpx.Response, response: Response) -> Response:
+def _log_upstream(method: str, path: str, upstream: httpx.Response, sent: str = "") -> None:
+    """One line per auth call: status and cookie names only (never values, tokens or bodies of successes)."""
+    set_names = [c.split("=", 1)[0] + (" (deleted)" if "max-age=0" in c.lower() else "")
+                 + next((f" {a.strip()}" for a in c.split(";")[1:] if a.strip().lower().startswith("path=")), " no-path")
+                 for c in upstream.headers.get_list("set-cookie")]
+    sent_names = [c.split("=", 1)[0] for c in sent.split("; ") if c]
+    error = f" error={upstream.text[:200]!r}" if upstream.status_code >= 400 else ""
+    if path.startswith("get-session") and upstream.status_code == 200:
+        try:
+            error = f" session={'yes' if (upstream.json() or {}).get('session') else 'no'}"
+        except (ValueError, AttributeError):
+            error = " session=unreadable"
+    log.info("auth %s %s -> %s sent=%s set=%s%s", method, path, upstream.status_code, sent_names, set_names, error)
+
+
+def _copy_cookies(upstream: httpx.Response, response: Response, request: Request) -> Response:
+    for cookie in stale_cookie_deletions(request.headers.get("cookie", "")):
+        response.headers.append("set-cookie", cookie)
     for cookie in upstream.headers.get_list("set-cookie"):
         response.headers.append("set-cookie", rewrite_set_cookie(cookie, config.COOKIE_DOMAIN))
     return response
@@ -180,15 +215,18 @@ async def complete(request: Request) -> Response:
     failed = RedirectResponse(f"{config.FRONTEND_URL}/signin?error=oauth", status_code=302)
     names = {pair.split("=", 1)[0] for pair in neon_cookies(request.headers.get("cookie", "")).split("; ")}
     if names.isdisjoint(CHALLENGE_COOKIES):
+        log.info("auth complete: verifier but no challenge cookie (browser sent %s)", sorted(names - {""}))
         return failed
     try:  # same query as the SDK sends: the whole callback query, verifier included
         upstream = await _call("GET", "get-session", query=request.url.query, headers=_upstream_headers(request),
                                body=None)
-    except HTTPException:
+    except HTTPException as e:
+        log.info("auth complete: upstream unreachable (%s)", e.status_code)
         return failed
+    _log_upstream("GET", "get-session (verifier)", upstream, sent=_upstream_headers(request).get("cookie", ""))
     if upstream.status_code != 200 or not upstream.headers.get_list("set-cookie"):
         return failed
-    return _copy_cookies(upstream, RedirectResponse(target, status_code=302))
+    return _copy_cookies(upstream, RedirectResponse(target, status_code=302), request)
 
 
 @router.api_route("/{path:path}", methods=["GET", "POST"])
@@ -201,10 +239,11 @@ async def proxy(path: str, request: Request) -> Response:
                                body=await request.body() or None)
     except HTTPException as e:  # Better Auth's error shape, so the client shows the message
         return JSONResponse({"code": ERROR_CODES[e.status_code], "message": e.detail}, status_code=e.status_code)
+    _log_upstream(request.method, path, upstream, sent=headers.get("cookie", ""))
     if path == "sign-out":
         sessions.drop(headers.get("cookie", ""))
     response = Response(content=upstream.content, status_code=upstream.status_code)
     for name in FORWARD_RESPONSE_HEADERS:
         if name in upstream.headers:
             response.headers[name] = upstream.headers[name]
-    return _copy_cookies(upstream, response)
+    return _copy_cookies(upstream, response, request)
