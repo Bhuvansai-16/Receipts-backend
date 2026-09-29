@@ -142,9 +142,22 @@ class WriterResult:
     scope: str = ""  # what the scope check pruned and why
 
 
+class _CommandLog(list):
+    """The sandbox backends append one entry per shell command; count them out loud for the live UI."""
+
+    def __init__(self, on_count):
+        super().__init__()
+        self._on_count = on_count
+
+    def append(self, entry) -> None:
+        super().append(entry)
+        self._on_count(len(self))
+
+
 async def write_test(issue: str, base_image, emit=None) -> WriterResult:
     out = WriterResult()
     emit = emit or (lambda type_, data=None: None)
+    out.log = _CommandLog(lambda n: emit("writer_progress", {"commands": n}))
     backend = await agent_backend(await blind_workspace(base_image), out.log)
     tavily = TavilySearch(max_results=5, include_domains=DOC_DOMAINS, exclude_domains=CODE_HOSTS)
 

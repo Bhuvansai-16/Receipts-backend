@@ -163,3 +163,35 @@ def test_writer_emits_submit_events(monkeypatch):
     subs = [d for t, d in seen if t == "writer_submit"]
     assert [d["accepted"] for d in subs] == [False, True]
     assert subs[0]["attempt"] == 1 and "sticks to the issue" in subs[0]["reason"]
+
+
+def test_writer_streams_its_command_count(monkeypatch):
+    seen = []
+
+    class Agent:
+        async def ainvoke(self, *a, **k):
+            return None
+
+    class Backend:
+        async def adownload_files(self, paths):
+            return [SimpleNamespace(error="file_not_found", content=None)]
+
+        async def aclose(self):
+            pass
+
+    async def backend(image, log):
+        log.append({"cmd": "ls"})  # what the sandbox backends do for every shell command
+        log.append({"cmd": "cat requests/models.py"})
+        return Backend()
+
+    async def blind(image):
+        return image
+
+    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
+    monkeypatch.setattr(writer.config, "llm", lambda role: None)
+    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
+    monkeypatch.setattr(writer, "agent_backend", backend)
+    monkeypatch.setattr(writer, "blind_workspace", blind)
+    out = asyncio.run(writer.write_test("issue", object(), lambda t, d: seen.append((t, d))))
+    assert [d["commands"] for t, d in seen if t == "writer_progress"] == [1, 2]
+    assert [e["cmd"] for e in out.log] == ["ls", "cat requests/models.py"]

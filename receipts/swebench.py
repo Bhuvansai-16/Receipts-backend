@@ -22,11 +22,23 @@ class Instance:
     pass_to_pass: list[str]
 
 
+CACHE = config.ROOT / ".cache" / "swebench_verified.json"
+
+
 @lru_cache(maxsize=1)
 def _dataset() -> dict:
+    """Rows by instance id. The first load comes from Hugging Face (15-30 s, it also checks the hub);
+    after that from a local copy, so the server and CLI start fast."""
+    if CACHE.is_file():
+        return json.loads(CACHE.read_text(encoding="utf-8"))
     from datasets import load_dataset
 
-    return {r["instance_id"]: r for r in load_dataset("princeton-nlp/SWE-bench_Verified", split="test")}
+    rows = {r["instance_id"]: dict(r) for r in load_dataset("princeton-nlp/SWE-bench_Verified", split="test")}
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CACHE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(rows), encoding="utf-8")
+    tmp.replace(CACHE)  # atomic: an interrupted write never leaves a half file behind
+    return rows
 
 
 def load_instance(instance_id: str) -> Instance:

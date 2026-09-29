@@ -53,7 +53,10 @@ _slots: asyncio.Semaphore | None = None
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Loading SWE-bench takes ~15 s (it also checks the HF hub); do it now so the issue picker is instant.
+    warmup = asyncio.get_running_loop().run_in_executor(None, _instances)
     yield
+    warmup.cancel()
     if config.SANDBOX_PROVIDER == "daytona":
         from .daytona_backend import client
 
