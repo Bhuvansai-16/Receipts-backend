@@ -1,25 +1,27 @@
-"""Web API + SPA host: start checks, stream their progress (SSE), serve saved evidence.
+"""Receipts API: sign-in (proxied to Neon Auth), checks and receipts. Runs live in Neon Postgres.
 
-python -m receipts serve   ->   http://127.0.0.1:8000
+python -m receipts serve   ->   http://127.0.0.1:8000   (the UI is the separate receipts-frontend repo)
 """
 import asyncio
+import hashlib
 import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from . import config, engine, swebench
+from . import auth, config, db, engine, swebench
 
 MAX_DIFF_BYTES = 200_000
-MAX_CONCURRENT_CHECKS = 2  # Daytona quota + Token Factory credit
-WEB_DIST = config.ROOT / "web" / "dist"
+MAX_CONCURRENT_CHECKS = 2  # whole server: Daytona quota + Token Factory credit
 
 
 class RunRequest(BaseModel):
@@ -29,14 +31,11 @@ class RunRequest(BaseModel):
 
 
 @dataclass
-class Run:
+class LiveRun:
+    """Progress of a run while it is active; once finished, the stored evidence takes over."""
+
     id: str
-    instance_id: str
-    pr: str
-    started_at: str
-    status: str = "queued"  # queued | running | done | error
     events: list[dict] = field(default_factory=list)
-    evidence: dict | None = None
     listeners: set = field(default_factory=set)
 
     def publish(self, type_: str, data: dict) -> None:
@@ -46,24 +45,56 @@ class Run:
             queue.put_nowait(event)
 
 
-RUNS: dict[str, Run] = {}
+LIVE: dict[str, LiveRun] = {}
 _tasks: set[asyncio.Task] = set()
 _slots: asyncio.Semaphore | None = None
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(app: FastAPI):
     # Loading SWE-bench takes ~15 s (it also checks the HF hub); do it now so the issue picker is instant.
     warmup = asyncio.get_running_loop().run_in_executor(None, _instances)
+    pool = await db.open_pool(config.DATABASE_URL) if config.DATABASE_URL else None
+    app.state.runs = db.PgRuns(pool) if pool else db.MemoryRuns()  # ponytail: no DATABASE_URL = nothing persists
+    await app.state.runs.fail_unfinished()  # their tasks died with the previous process
     yield
     warmup.cancel()
+    await auth.close()
+    if pool:
+        await pool.close()
     if config.SANDBOX_PROVIDER == "daytona":
         from .daytona_backend import client
 
         await client().close()
 
 
-app = FastAPI(title="Receipts", lifespan=lifespan)
+app = FastAPI(title="Receipts API", lifespan=lifespan)
+app.include_router(auth.router)
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # leaves text/event-stream alone
+app.add_middleware(CORSMiddleware, allow_origins=[config.FRONTEND_URL], allow_credentials=True,
+                   allow_methods=["GET", "POST"], allow_headers=["content-type", "authorization"])
+
+
+def runs_store(request: Request):
+    return request.app.state.runs
+
+
+def _json_default(value):
+    return value.isoformat() if isinstance(value, datetime) else str(value)
+
+
+def _dumps(payload) -> bytes:
+    return json.dumps(payload, separators=(",", ":"), default=_json_default).encode()
+
+
+def cached_json(request: Request, payload, cache_control: str) -> Response:
+    """JSON with an ETag; a matching If-None-Match gets an empty 304."""
+    body = _dumps(payload)
+    etag = f'"{hashlib.sha256(body).hexdigest()[:32]}"'
+    headers = {"ETag": etag, "Cache-Control": cache_control}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(body, media_type="application/json", headers=headers)
 
 
 @lru_cache(maxsize=1)
@@ -81,105 +112,126 @@ def _load(instance_id: str) -> swebench.Instance:
         raise HTTPException(404, str(e))
 
 
+@app.get("/api/health")
+def health() -> dict:
+    return {"ok": True}
+
+
 @app.get("/api/instances")
-def list_instances() -> list[dict]:
-    return _instances()
+def list_instances(request: Request) -> Response:
+    return cached_json(request, _instances(), "public, max-age=3600")
 
 
 @app.get("/api/instances/{instance_id}")
-def get_instance(instance_id: str) -> dict:
+def get_instance(instance_id: str, request: Request) -> Response:
     inst = _load(instance_id)
-    return {"id": inst.instance_id, "repo": inst.repo, "problem_statement": inst.problem_statement}
+    return cached_json(request, {"id": inst.instance_id, "repo": inst.repo,
+                                 "problem_statement": inst.problem_statement}, "public, max-age=3600")
+
+
+@app.get("/api/me")
+async def me(user: dict = Depends(auth.current_user)) -> dict:
+    return {key: user.get(key) for key in ("id", "email", "name", "image")}
 
 
 @app.post("/api/runs", status_code=202)
-async def start_run(req: RunRequest) -> dict:
+async def start_run(req: RunRequest, user: dict = Depends(auth.current_user), runs=Depends(runs_store)) -> dict:
     inst = _load(req.instance_id)
     if req.pr == "diff":
         if not (req.diff or "").strip():
             raise HTTPException(422, "Paste a unified diff, or pick the real fix or a do-nothing PR.")
         if len(req.diff.encode()) > MAX_DIFF_BYTES:
             raise HTTPException(413, f"Diff is larger than {MAX_DIFF_BYTES // 1000} KB.")
+    # ponytail: check-then-insert; two simultaneous clicks can both pass. Fine for a cost guard.
+    active, recent = await runs.usage(user["id"], datetime.now(timezone.utc) - timedelta(days=1))
+    if active >= config.MAX_ACTIVE_RUNS:
+        raise HTTPException(429, f"You already have {active} checks running. Start another when one finishes.")
+    if recent >= config.RUNS_PER_DAY:
+        raise HTTPException(429, f"Daily limit reached ({config.RUNS_PER_DAY} checks in 24 hours). Try again later.")
     patch = {"gold": inst.gold_patch, "none": None, "diff": req.diff}[req.pr]
-    run_id = engine.new_run_id(inst.instance_id, req.pr, taken=RUNS)
-    run = RUNS[run_id] = Run(run_id, inst.instance_id, req.pr, engine.now_iso())
-    task = asyncio.create_task(_execute(run, inst, patch))
+    run_id = engine.new_run_id(inst.instance_id, req.pr, taken=LIVE)
+    await runs.create(run_id, user["id"], inst.instance_id, req.pr)
+    live = LIVE[run_id] = LiveRun(run_id)
+    task = asyncio.create_task(_execute(live, inst, patch, runs))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return {"run_id": run_id}
 
 
-async def _execute(run: Run, inst: swebench.Instance, patch: str | None) -> None:
+async def _execute(live: LiveRun, inst: swebench.Instance, patch: str | None, runs) -> None:
     global _slots
     _slots = _slots or asyncio.Semaphore(MAX_CONCURRENT_CHECKS)
-    async with _slots:
-        run.status = "running"
-        run.publish("status", {"status": "running"})
-        try:
-            # "done" is sent below, after the evidence is saved, so clients never fetch a half-written run
-            ev = await engine.check(inst, patch, emit=lambda t, d: t != "done" and run.publish(t, d))
-            ev.update(run_id=run.id, pr=run.pr)
-            engine.save_evidence(ev, run.id)
-            run.evidence, run.status = ev, "done"
-        except Exception as e:  # engine.check never raises by design; this is a last resort
-            run.status = "error"
-            run.publish("error", {"message": f"{type(e).__name__}: {e}"})
-    run.publish("done", {})
-
-
-def _saved(run_id: str) -> dict | None:
-    if not engine.safe_run_id(run_id):
-        return None
-    path = config.RUNS_DIR / f"{run_id}.json"
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
-
-
-def _pr_label(run_id: str, ev: dict) -> str:
-    # <instance>-<pr>-<YYYYmmdd-HHMMSS>
-    return ev.get("pr") or run_id[len(ev.get("instance_id", "")) + 1:-16] or "?"
+    status, evidence = "error", {"instance_id": inst.instance_id, "reason": "the check failed to run"}
+    try:
+        async with _slots:
+            await runs.mark_running(live.id)
+            live.publish("status", {"status": "running"})
+            # "done" is sent below, after the evidence is stored, so clients never read a half-written run
+            evidence = await engine.check(inst, patch, emit=lambda t, d: t != "done" and live.publish(t, d))
+            status = "done"
+    except Exception as e:  # engine.check never raises by design; the sandbox or database can
+        live.publish("error", {"message": f"{type(e).__name__}: {e}"})
+    finally:
+        try:  # store what the viewers saw, so a replay equals the live stream
+            await runs.finish(live.id, status, {**evidence, "run_id": live.id, "events": live.events})
+        finally:
+            live.publish("done", {})
+            LIVE.pop(live.id, None)
 
 
 @app.get("/api/runs")
-def list_runs() -> list[dict]:
-    rows = {}
-    for path in config.RUNS_DIR.glob("*.json") if config.RUNS_DIR.exists() else []:
-        try:
-            ev = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError:
-            continue
-        rows[path.stem] = {"run_id": path.stem, "instance_id": ev.get("instance_id"), "pr": _pr_label(path.stem, ev),
-                           "status": "done", "verdict": ev.get("verdict"), "started_at": ev.get("started_at", "")}
-    for run in RUNS.values():
-        rows[run.id] = {"run_id": run.id, "instance_id": run.instance_id, "pr": run.pr, "status": run.status,
-                        "verdict": (run.evidence or {}).get("verdict"), "started_at": run.started_at}
-    return sorted(rows.values(), key=lambda r: r["started_at"], reverse=True)
+async def my_runs(request: Request, cursor: str | None = None, limit: int = Query(20, ge=1, le=50),
+                  user: dict = Depends(auth.current_user), runs=Depends(runs_store)) -> Response:
+    try:
+        after = db.decode_cursor(cursor) if cursor else None
+    except ValueError:
+        raise HTTPException(400, "Invalid cursor.")
+    rows = await runs.list_for_user(user["id"], limit + 1, after)
+    more, rows = len(rows) > limit, rows[:limit]
+    next_cursor = db.encode_cursor(rows[-1]["started_at"], rows[-1]["id"]) if more else None
+    return cached_json(request, {"runs": rows, "next_cursor": next_cursor}, "private, no-cache")
+
+
+async def _stored(run_id: str, runs) -> dict:
+    row = await runs.get(run_id) if engine.safe_run_id(run_id) else None
+    if row is None:
+        raise HTTPException(404, "No such run.")
+    return row
 
 
 @app.get("/api/runs/{run_id}")
-def get_run(run_id: str) -> dict:
-    if run := RUNS.get(run_id):
-        partial = {"instance_id": run.instance_id, "pr": run.pr, "started_at": run.started_at, "events": run.events}
-        return {"status": run.status, "evidence": run.evidence or partial}
-    if (ev := _saved(run_id)) is None:
-        raise HTTPException(404, "No such run.")
-    ev.setdefault("pr", _pr_label(run_id, ev))
-    return {"status": "done", "evidence": ev}
+async def get_run(run_id: str, runs=Depends(runs_store)) -> Response:
+    row = await _stored(run_id, runs)
+    evidence = row["evidence"]
+    if evidence is None:  # queued or running (or killed by a restart): what has happened so far
+        live = LIVE.get(run_id)
+        events = list(live.events) if live else []
+        if row["status"] == "error" and row["reason"]:
+            events.append({"type": "error", "data": {"message": row["reason"]}})
+        evidence = {"instance_id": row["instance_id"], "started_at": row["started_at"], "events": events}
+    finished = row["status"] in ("done", "error")
+    return Response(_dumps({"status": row["status"], "evidence": {**evidence, "pr": evidence.get("pr") or row["pr"]}}),
+                    media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=31536000, immutable" if finished else "no-store"})
 
 
 @app.get("/api/runs/{run_id}/events")
-async def run_events(run_id: str):
-    run = RUNS.get(run_id)
-    if run is None and (ev := _saved(run_id)) is None:
-        raise HTTPException(404, "No such run.")
+async def run_events(run_id: str, runs=Depends(runs_store)):
+    live = LIVE.get(run_id)
+    if live is None:  # finished: replay what was stored
+        row = await _stored(run_id, runs)
+        stored = [e for e in (row["evidence"] or {}).get("events", []) if e["type"] != "done"]
+
+        async def replay():
+            for event in stored + [{"type": "done", "data": {}}]:
+                yield {"event": event["type"], "data": json.dumps(event["data"])}
+
+        return EventSourceResponse(replay())
 
     async def stream():
-        if run is None:  # finished before this server started: replay what was stored
-            for event in [e for e in ev.get("events", []) if e["type"] != "done"] + [{"type": "done", "data": {}}]:
-                yield {"event": event["type"], "data": json.dumps(event["data"])}
-            return
         queue: asyncio.Queue = asyncio.Queue()
-        backlog = list(run.events)
-        run.listeners.add(queue)
+        backlog = list(live.events)
+        live.listeners.add(queue)
         try:
             for event in backlog:
                 yield {"event": event["type"], "data": json.dumps(event["data"])}
@@ -191,17 +243,6 @@ async def run_events(run_id: str):
                 if event["type"] == "done":
                     return
         finally:
-            run.listeners.discard(queue)
+            live.listeners.discard(queue)
 
     return EventSourceResponse(stream())
-
-
-if WEB_DIST.is_dir():  # built SPA (npm run build); in development Vite serves it and proxies /api
-    app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
-
-    @app.get("/{path:path}", include_in_schema=False)
-    def spa(path: str):
-        if path.startswith("api/"):
-            raise HTTPException(404)
-        file = WEB_DIST / path
-        return FileResponse(file if path and file.is_file() else WEB_DIST / "index.html")

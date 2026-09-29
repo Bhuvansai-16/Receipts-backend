@@ -37,3 +37,14 @@ def test_migrate_uses_the_direct_connection(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["receipts", "migrate"])
     cli.main()
     assert seen == ["direct"] and "001_init" in capsys.readouterr().out
+
+
+def test_serve_uses_a_selector_loop_on_windows(monkeypatch):
+    import uvicorn
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw, app=app))
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "argv", ["receipts", "serve", "--port", "8123"])
+    cli.main()
+    assert seen == {"app": "receipts.server:app", "host": "127.0.0.1", "port": 8123, "loop": "asyncio:SelectorEventLoop"}

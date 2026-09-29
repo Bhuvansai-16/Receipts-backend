@@ -3,29 +3,47 @@
 Checks whether a pull request does what it claims: writes the missing test blind (from the issue only),
 runs it in forked Nebius Token Factory sandboxes, and reports the evidence.
 
-MVP: fix engine on SWE-bench Verified, CLI only.
+MVP: fix engine on SWE-bench Verified, as a CLI and an API (UI in the `receipts-frontend` repo).
 
 ## Setup (global Python, no venv)
 
 ```bash
-pip install contree-sdk "contree-client[httpx]" deepagents langchain-openai langchain-tavily langsmith datasets python-dotenv
+pip install contree-sdk "contree-client[httpx]" deepagents langchain-openai langchain-tavily langsmith datasets python-dotenv \
+    fastapi uvicorn sse-starlette "psycopg[binary]" psycopg-pool httpx
 cp .env.example .env   # fill in keys
 python -m receipts smoke --instance psf__requests-1142
 ```
 
-## Web UI
+## API server
 
-Pick an issue, choose the PR (the real fix, a do-nothing PR, or your own diff) and watch the receipt print
-live; finished receipts show the blind test, every run's output and the second opinion. Needs Node 20+ once
-to build the UI.
+The React UI is the separate `receipts-frontend` repo; it talks only to this API. People sign up with email
+and password or GitHub (Neon Auth), runs are stored in Neon Postgres, and anyone with a receipt link can open
+it without signing in.
 
 ```bash
-cd web && npm install && npm run build   # once
-python -m receipts serve                  # http://127.0.0.1:8000
+python -m receipts migrate       # once, and after new files in migrations/
+python -m receipts import-runs   # optional: publish runs/*.json as example receipts
+python -m receipts serve         # http://127.0.0.1:8000
 ```
 
-UI development: run `python -m receipts serve` and, in `web/`, `npm run dev` (Vite on :5173, proxying
-`/api` to :8000). `npm test` runs the front-end tests.
+Without `DATABASE_URL` the API still starts, but keeps runs in memory only.
+
+## Sign-in and database (Neon)
+
+1. Neon Console > your project (AWS region) > Connect: the pooled connection string (host contains
+   `-pooler`) goes in `DATABASE_URL`, the direct one in `DATABASE_URL_UNPOOLED`. Keep
+   `sslmode=require&channel_binding=require` on both.
+2. Neon Console > Auth: enable it and copy the Auth URL into `NEON_AUTH_URL`.
+3. GitHub sign-in: create a GitHub OAuth App (GitHub > Settings > Developer settings) with the callback URL
+   `{NEON_AUTH_URL}/callback/github`, then add its client ID and secret under Neon Auth > OAuth providers.
+4. `FRONTEND_URL` is where the UI runs (default `http://localhost:5173`). In production, serve UI and API from
+   one parent domain (`app.example.com` + `api.example.com`) so auth cookies stay first-party, add both to Neon
+   Auth's trusted domains, and work through Neon's production checklist (own SMTP, email verification,
+   "Allow localhost" off).
+
+The browser never talks to Neon directly: `/api/auth/*` proxies Neon Auth the way Neon's own server SDK does
+and rewrites its cookies to `HttpOnly; Secure; SameSite=Lax`. Other endpoints: `/api/me`, `/api/runs` (your
+runs, newest first, paged), `/api/runs/{id}` and `/api/runs/{id}/events` (public receipts), `/api/health`.
 
 ## Sandbox provider
 
