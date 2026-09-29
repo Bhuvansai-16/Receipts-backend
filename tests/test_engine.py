@@ -102,6 +102,22 @@ def test_fork_events_say_which_side_and_whether_it_passed():
 
 def test_save_evidence_writes_run_file(tmp_path, monkeypatch):
     monkeypatch.setattr(engine.config, "RUNS_DIR", tmp_path)
-    path = engine.save_evidence({"instance_id": "x__y-1", "verdict": "PROVEN"}, "gold")
-    assert path.parent == tmp_path and path.name.startswith("x__y-1-gold-") and path.suffix == ".json"
+    run_id = engine.new_run_id("x__y-1", "gold")
+    path = engine.save_evidence({"instance_id": "x__y-1", "verdict": "PROVEN"}, run_id)
+    assert run_id.startswith("x__y-1-gold-") and path == tmp_path / f"{run_id}.json"
     assert '"PROVEN"' in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("bad", ["../x", "a/b", "..\\x", "", "x y", ".hidden"])
+def test_save_evidence_refuses_unsafe_run_ids(tmp_path, monkeypatch, bad):
+    monkeypatch.setattr(engine.config, "RUNS_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        engine.save_evidence({}, bad)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_new_run_id_is_safe_and_unique(tmp_path, monkeypatch):
+    monkeypatch.setattr(engine.config, "RUNS_DIR", tmp_path)
+    first = engine.new_run_id("x__y-1", "../my fix!")
+    assert engine.safe_run_id(first) and "/" not in first and " " not in first
+    assert engine.new_run_id("x__y-1", "../my fix!", taken={first}) != first  # same second, no clash

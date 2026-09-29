@@ -85,10 +85,35 @@ def _passed(run: PytestRun) -> bool:
     return bool(run.results) and all(r.outcome == "passed" for r in run.results.values())
 
 
-def save_evidence(ev: dict, label: str) -> Path:
-    """Write the evidence JSON to runs/<instance>-<label>-<timestamp>.json (shared by CLI and server)."""
+_SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+
+
+def safe_run_id(run_id: str) -> bool:
+    """Run ids become file names (and arrive over HTTP): letters, digits, _ . - only, no leading dot."""
+    return bool(_SAFE_RUN_ID.match(run_id))
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_run_id(instance_id: str, label: str, taken=()) -> str:
+    """<instance>-<label>-<YYYYmmdd-HHMMSS>, suffixed -2, -3... if that id is already used."""
+    label = re.sub(r"[^A-Za-z0-9_.-]+", "-", label).strip(".-") or "patch"
+    base = f"{instance_id}-{label}-{datetime.now():%Y%m%d-%H%M%S}"
+    run_id, n = base, 1
+    while run_id in taken or (config.RUNS_DIR / f"{run_id}.json").exists():
+        n += 1
+        run_id = f"{base}-{n}"
+    return run_id
+
+
+def save_evidence(ev: dict, run_id: str) -> Path:
+    """Write the evidence JSON to runs/<run_id>.json (shared by CLI and server)."""
+    if not safe_run_id(run_id):
+        raise ValueError(f"unsafe run id: {run_id!r}")
     config.RUNS_DIR.mkdir(exist_ok=True)
-    path = config.RUNS_DIR / f"{ev['instance_id']}-{label}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    path = config.RUNS_DIR / f"{run_id}.json"
     path.write_text(json.dumps(ev, indent=2, default=str), encoding="utf-8")
     return path
 
@@ -102,7 +127,7 @@ async def check(inst: Instance, patch: str | None, emit=None) -> dict:
     """
     t0 = time.monotonic()
     ev: dict = {"instance_id": inst.instance_id, "repo": inst.repo, "patch_files": changed_files(patch or ""),
-                "started_at": datetime.now(timezone.utc).isoformat(), "models": config.MODELS, "events": []}
+                "started_at": now_iso(), "models": config.MODELS, "events": []}
 
     def say(type_: str, data: dict | None = None) -> None:
         ev["events"].append({"type": type_, "t": round(time.monotonic() - t0, 1), "data": data or {}})

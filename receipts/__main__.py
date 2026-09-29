@@ -1,4 +1,4 @@
-"""CLI.  python -m receipts smoke [--instance ID]
+"""CLI.  python -m receipts smoke [--instance ID]  |  python -m receipts serve [--port 8000]
          python -m receipts run INSTANCE_ID [--patch gold|none|FILE]"""
 import argparse
 import asyncio
@@ -59,11 +59,17 @@ def main() -> None:
     r = sub.add_parser("run", help="check one SWE-bench Verified instance")
     r.add_argument("instance_id")
     r.add_argument("--patch", default="gold", help="gold | none | path to a .diff file")
+    v = sub.add_parser("serve", help="web UI + API (build the UI first: cd web && npm run build)")
+    v.add_argument("--port", type=int, default=8000)
     a = ap.parse_args()
     if a.cmd == "smoke":
         return asyncio.run(_closing(smoke(a.instance)))
+    if a.cmd == "serve":
+        import uvicorn
 
-    from .engine import check, save_evidence
+        return uvicorn.run("receipts.server:app", host="127.0.0.1", port=a.port)
+
+    from .engine import check, new_run_id, save_evidence
     from .swebench import load_instance
 
     try:
@@ -72,7 +78,8 @@ def main() -> None:
         sys.exit(f"error: {e}")
     patch, label = load_patch(a.patch, inst.gold_patch)
     ev = asyncio.run(_closing(check(inst, patch)))
-    out = save_evidence(ev, label)
+    ev["pr"] = a.patch if a.patch in ("gold", "none") else "diff"
+    out = save_evidence(ev, new_run_id(inst.instance_id, label))
     tokens = sum(u.get("total_tokens", 0) for u in (ev.get("tokens") or {}).values())
     print(f"\n{ev['verdict']}: {ev['reason']}\n  {ev['seconds']}s, {tokens} tokens\n  evidence: {out}")
 
