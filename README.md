@@ -13,6 +13,20 @@ cp .env.example .env   # fill in keys
 python -m receipts smoke --instance psf__requests-1142
 ```
 
+## Web UI
+
+Pick an issue, choose the PR (the real fix, a do-nothing PR, or your own diff) and watch the receipt print
+live; finished receipts show the blind test, every run's output and the second opinion. Needs Node 20+ once
+to build the UI.
+
+```bash
+cd web && npm install && npm run build   # once
+python -m receipts serve                  # http://127.0.0.1:8000
+```
+
+UI development: run `python -m receipts serve` and, in `web/`, `npm run dev` (Vite on :5173, proxying
+`/api` to :8000). `npm test` runs the front-end tests.
+
 ## Sandbox provider
 
 `SANDBOX_PROVIDER=contree` (default) runs on Nebius Token Factory Sandboxes, which the submission uses.

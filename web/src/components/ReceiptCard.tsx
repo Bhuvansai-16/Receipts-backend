@@ -32,7 +32,7 @@ const STEP_TEXT: Record<Step, string> = {
 
 const STRIP: Record<Verdict, string> = {
   PROVEN: "Fast lane: this PR does what it claims. Review it first.",
-  REFUTED: "The test still fails the same way with this PR, so it doesn't fix the issue as described.",
+  REFUTED: "This PR doesn't fix the issue as described.",
   REGRESSION: "It fixes the issue but breaks existing tests. Look at those first.",
   UNPROVEN: "Not enough evidence either way. This says nothing against the PR.",
   NO_CHECKABLE_CLAIM: "This PR doesn't claim to fix a bug, so there is nothing to check.",
@@ -95,6 +95,7 @@ export function ReceiptCard({ receipt: r, evidence, live, queued, elapsed, onRev
             value={r.claim ? CLAIM_KIND[r.claim.kind] ?? r.claim.kind : <>reading <Cursor /></>}
             pending={!r.claim}
             note={r.claim?.claim}
+            clamp
           />
         )}
 
@@ -134,6 +135,7 @@ export function ReceiptCard({ receipt: r, evidence, live, queued, elapsed, onRev
             value={<Tiles tiles={r.base} mustPass={false} pending={live} />}
             note={r.base.find((t) => !t.passed)?.message || undefined}
             mono
+            clamp
           />
         )}
 
@@ -157,6 +159,7 @@ export function ReceiptCard({ receipt: r, evidence, live, queued, elapsed, onRev
             label="Second opinion"
             value={r.secondOpinion.faithful ? "agrees" : "doubts the test"}
             note={r.secondOpinion.reason}
+            clamp
           />
         )}
 
@@ -228,14 +231,16 @@ function sentence(text: string): string {
   return t ? t[0].toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".") : t;
 }
 
-function Line(props: { label: string; value: ReactNode; note?: ReactNode; pending?: boolean; mono?: boolean }) {
+function Line(props: { label: string; value: ReactNode; note?: ReactNode; pending?: boolean; mono?: boolean; clamp?: boolean }) {
   return (
     <div className={`rline${props.pending ? " rline--pending" : ""}`}>
       <div className="rline__row">
         <span className="rline__label">{props.label}</span>
         <span className="rline__value">{props.value}</span>
       </div>
-      {props.note && <p className={`rline__note${props.mono ? " rline__note--mono" : ""}`}>{props.note}</p>}
+      {props.note && (
+        <p className={`rline__note${props.mono ? " rline__note--mono" : ""}${props.clamp ? " rline__note--clamp" : ""}`}>{props.note}</p>
+      )}
     </div>
   );
 }

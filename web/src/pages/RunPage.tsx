@@ -65,8 +65,8 @@ export function RunPage() {
     const el = document.getElementById(sectionId);
     if (!(el instanceof HTMLDetailsElement)) return;
     el.open = true;
-    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+    // Instant jump: smooth scrolling depends on animation frames, which background tabs throttle to zero.
+    el.scrollIntoView({ block: "start" });
     el.querySelector("summary")?.focus({ preventScroll: true });
   }
 
