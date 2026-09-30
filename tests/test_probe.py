@@ -50,6 +50,22 @@ def test_probe_records_collection_errors(tmp_path):
     assert r["test_bad.py"]["outcome"] == "error"
 
 
+def test_probe_keeps_where_an_import_time_error_started(tmp_path):
+    # Seen in sympy #14: code at module level raised deep inside the library; the tail alone hid "in <module>".
+    (tmp_path / "test_mod.py").write_text(
+        "def dig(n):\n"
+        "    if n == 0:\n"
+        "        raise TypeError('Invalid NaN comparison')\n"
+        "    return dig(n - 1)\n"
+        "dig(40)\n")
+    out = tmp_path / "out.json"
+    env = {**os.environ, "PYTHONPATH": str(PROBE_DIR), "RECEIPTS_OUT": str(out)}
+    subprocess.run([sys.executable, "-m", "pytest", "test_mod.py", "-p", "pytest_probe", "-p", "no:cacheprovider", "-q"],
+                   cwd=tmp_path, env=env, capture_output=True)
+    msg = json.loads(out.read_text())["test_mod.py"]["msg"]
+    assert "in <module>" in msg and "TypeError" in msg and len(msg) <= 500
+
+
 def test_parse_probe_output():
     stdout = "1 failed\n" + MARKER + '\n{"t.py::a": {"outcome": "failed", "exc": "AssertionError", "msg": "m"}}\n'
     run = parse_probe_output(stdout, "warn")

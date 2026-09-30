@@ -149,6 +149,14 @@ def test_suite_candidates():
     assert suite_candidates(base, pr) == ["b"]
 
 
+def test_repro_explains_other_errors_raised_at_import():
+    # Seen in sympy #14: the buggy call sat at module level, so pytest reported only a CollectionError.
+    msg = ("receipts_test.py:9: in <module>\n    sorted([f(nan), f(1)], key=default_sort_key)\n ... \n"
+           "E   TypeError: Invalid NaN comparison")
+    ok, reason = repro_check(R({"receipts_test.py": ("error", "CollectionError", msg)}))
+    assert not ok and "TypeError" in reason and "def test_" in reason and "assert False" in reason
+
+
 def test_repro_explains_an_assert_at_module_level():
     # Seen twice: the writer's assert ran at import time, and "CollectionError" alone never got it fixed.
     msg = 'receipts_test.py:7: in <module>\n    assert result == -z**2\nE   AssertionError: Expected -z**2'

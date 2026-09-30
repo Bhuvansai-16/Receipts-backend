@@ -32,7 +32,10 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_collectreport(report):
     if report.failed:
-        _record(report.nodeid or "<collection>", "error", "CollectionError", str(report.longrepr)[-500:])
+        text = str(report.longrepr)
+        # head says where it started ("in <module>"), tail says what was raised
+        msg = text if len(text) <= 500 else text[:200] + "\n...\n" + text[-295:]
+        _record(report.nodeid or "<collection>", "error", "CollectionError", msg)
 
 
 def pytest_sessionfinish(session):
