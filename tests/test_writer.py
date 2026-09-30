@@ -108,7 +108,7 @@ def test_keep_tests_drops_tests_that_passed_on_base():
     assert "test_guard" not in kept and "__main__" not in kept  # runner block would call dropped tests
 
 
-def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=None):
+def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=None, issue="issue"):
     class Agent:
         async def ainvoke(self, *a, **k):
             return None  # agent stops without submitting; the leftover file gets submitted
@@ -148,7 +148,7 @@ def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=No
                      ("scope_check", scope_check), ("stated_cases", stated_cases),
                      ("after_fix_check", after_fix_check)]:
         monkeypatch.setattr(writer, name, fn)
-    return asyncio.run(writer.write_test("issue", object(), emit))
+    return asyncio.run(writer.write_test(issue, object(), emit))
 
 
 CODE = ("def test_bug():\n    assert 1 == 2\n\n\ndef test_extra():\n    assert 3 == 4\n\n\n"
@@ -428,3 +428,22 @@ def test_every_counted_submission_is_kept_with_its_code_and_reason(monkeypatch):
     out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=[]))
     assert [(s["attempt"], s["accepted"], s["code"]) for s in out.submissions] == [(1, False, CODE)]
     assert "sticks to the issue" in out.submissions[0]["reason"]
+
+
+def test_the_exception_the_issue_reports_gets_a_try_except_hint(monkeypatch):
+    # Seen in sympy #14 (re-run): the bug is "TypeError: Invalid NaN comparison"; the test let it raise, the
+    # generic "only AssertionError failures count" never got it fixed, and the writer drifted into fixing sympy.
+    replies = []
+
+    class Agent:
+        def __init__(self, tools):
+            self.submit = next(t for t in tools if t.name == "submit_test")
+
+        async def ainvoke(self, *a, **k):
+            replies.append(await self.submit.ainvoke({}))
+
+    raised = {"receipts_test.py::test_bug": ("failed", "TypeError", "Invalid NaN comparison")}
+    issue = "str(f(nan) + f(1)) raises\nTypeError: Invalid NaN comparison"
+    _fake_writer_run(monkeypatch, CODE, raised, SimpleNamespace(faithful=["test_bug"]),
+                     make_agent=lambda k: Agent(k["tools"]), issue=issue)
+    assert "the bug the issue reports" in replies[0] and "except TypeError as e" in replies[0]

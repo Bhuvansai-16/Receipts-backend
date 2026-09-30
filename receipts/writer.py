@@ -212,6 +212,17 @@ async def after_fix_check(issue: str, test_code: str, tests: list[str]) -> list[
     return review.tests
 
 
+def reported_exception_hint(run: PytestRun, issue: str) -> str:
+    """When a test raised the very exception the issue reports, show how to turn it into an assertion.
+    Seen in sympy #14: the generic "only AssertionError failures count" never got that done."""
+    for r in run.results.values():
+        if r.outcome == "failed" and r.exc and r.exc != "AssertionError" and r.exc in issue:
+            return (f"\nThat {r.exc} is the bug the issue reports, so the test must catch it and fail with an "
+                    f"assertion instead:\n    try:\n        <the call from the issue>\n"
+                    f"    except {r.exc} as e:\n        assert False, f\"raised {{e!r}}\"")
+    return ""
+
+
 def _test_name(nodeid: str) -> str:
     return nodeid.split("::")[-1].split("[")[0]
 
@@ -325,7 +336,8 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: code.encode()})
         ok, out.reason = repro_check(run)
         if not ok:
-            return f"REJECTED: {out.reason}\n--- pytest output (tail) ---\n{run.output[-2500:]}"
+            return (f"REJECTED: {out.reason}{reported_exception_hint(run, issue)}\n"
+                    f"--- pytest output (tail) ---\n{run.output[-2500:]}")
         # Keep only tests that reproduce the bug AND stick to the issue; prune the rest ourselves instead of
         # sending the agent round again (it tends to run out of budget before resubmitting).
         failing = [n for n, r in run.results.items() if r.outcome != "passed"]
