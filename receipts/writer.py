@@ -265,15 +265,16 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
             return "REJECTED: attempt limit reached. Stop now."
         [dl] = await backend.adownload_files([TEST_PATH])
         code = None if dl.error or not dl.content else text(dl.content)
+        if code is None:  # seen: the budget's auto-submit found no file yet and used up an attempt
+            last["repeats"] += 1
+            return (f"REJECTED, not counted as an attempt: there is no {TEST_PATH} yet. "
+                    "Write it with write_file, then call submit_test.")
         if code == last["code"]:
             last["repeats"] += 1
             return (f"REJECTED again, not counted as an attempt: {TEST_PATH} is unchanged since your last "
                     f"submission, which was rejected: {out.reason}. Change the file before submitting.")
         last["code"], last["repeats"] = code, 0
         out.attempts += 1
-        if code is None:
-            out.reason = f"could not read {TEST_PATH}: {dl.error}"
-            return f"REJECTED: {out.reason}"
         run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: code.encode()})
         ok, out.reason = repro_check(run)
         if not ok:

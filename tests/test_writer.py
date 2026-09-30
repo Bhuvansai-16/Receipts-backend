@@ -346,3 +346,34 @@ def test_cases_come_from_the_issue_alone_and_reach_writer_and_reviewer(monkeypat
     scope = SimpleNamespace(faithful=["test_bug"], cases=cases)
     _fake_writer_run(monkeypatch, CODE, RESULTS, scope, make_agent=lambda k: Agent())
     assert all(c in first["message"] for c in cases) and scope.cases_seen == cases
+
+
+def test_submitting_before_the_file_exists_costs_no_attempt(monkeypatch):
+    # Seen in #14, #15, #16: the budget's auto-submit found no file yet and used up attempt 1 of 5.
+    replies = []
+
+    class Agent:
+        def __init__(self, tools):
+            self.submit = next(t for t in tools if t.name == "submit_test")
+
+        async def ainvoke(self, *a, **k):
+            replies.append(await self.submit.ainvoke({}))
+
+    class Backend:
+        async def adownload_files(self, paths):
+            return [SimpleNamespace(error="file_not_found", content=None)]
+
+    async def backend(image, log):
+        return Backend()
+
+    async def blind(image):
+        return image
+
+    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent(k["tools"]))
+    monkeypatch.setattr(writer.config, "llm", lambda role: None)
+    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
+    monkeypatch.setattr(writer, "agent_backend", backend)
+    monkeypatch.setattr(writer, "blind_workspace", blind)
+    monkeypatch.setattr(writer, "stated_cases", lambda issue: asyncio.sleep(0, []))
+    out = asyncio.run(writer.write_test("issue", object()))
+    assert out.attempts == 0 and "not counted" in replies[0] and "write_file" in replies[0]
