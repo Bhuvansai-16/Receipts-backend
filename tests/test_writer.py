@@ -195,3 +195,58 @@ def test_writer_streams_its_command_count(monkeypatch):
     out = asyncio.run(writer.write_test("issue", object(), lambda t, d: seen.append((t, d))))
     assert [d["commands"] for t, d in seen if t == "writer_progress"] == [1, 2]
     assert [e["cmd"] for e in out.log] == ["ls", "cat requests/models.py"]
+
+
+def _through(mw, *names):
+    """Send tool calls through the budget middleware; return the tools that really ran and the replies."""
+    from langchain.agents.middleware.types import ToolCallRequest
+    from langchain_core.messages import ToolMessage
+
+    ran = []
+
+    async def handler(req):
+        ran.append(req.tool_call["name"])
+        return ToolMessage("ok", tool_call_id=req.tool_call["id"])
+
+    async def go():
+        return [await mw.awrap_tool_call(ToolCallRequest({"name": n, "args": {}, "id": str(i)}, None, {}, None),
+                                         handler) for i, n in enumerate(names)]
+
+    return ran, asyncio.run(go())
+
+
+def test_exploration_budget_stops_look_around_tools_until_a_submission(monkeypatch):
+    monkeypatch.setattr(writer, "EXPLORE_LIMIT", 2)
+    monkeypatch.setattr(writer, "RETRY_ALLOWANCE", 1)
+    ran, replies = _through(writer.ExplorationBudget(), "grep", "read_file", "execute", "write_file",
+                            "submit_test", "execute", "read_file", "edit_file")
+    # the third look-around call is refused; writing and submitting always run; a submission buys one more
+    assert ran == ["grep", "read_file", "write_file", "submit_test", "execute", "edit_file"]
+    assert "write_file" in replies[2].content and "submit_test" in replies[2].content
+    assert replies[2].tool_call_id == "2" and replies[6].tool_call_id == "6"
+
+
+def test_writer_agent_runs_with_the_exploration_budget(monkeypatch):
+    seen = {}
+
+    class Agent:
+        async def ainvoke(self, *a, **k):
+            return None
+
+    class Backend:
+        async def adownload_files(self, paths):
+            return [SimpleNamespace(error="file_not_found", content=None)]
+
+    async def backend(image, log):
+        return Backend()
+
+    async def blind(image):
+        return image
+
+    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: seen.update(k) or Agent())
+    monkeypatch.setattr(writer.config, "llm", lambda role: None)
+    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
+    monkeypatch.setattr(writer, "agent_backend", backend)
+    monkeypatch.setattr(writer, "blind_workspace", blind)
+    asyncio.run(writer.write_test("issue", object()))
+    assert any(isinstance(m, writer.ExplorationBudget) for m in seen["middleware"])

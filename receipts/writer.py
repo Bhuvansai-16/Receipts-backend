@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from contree_sdk.langchain.sandbox import ContreeSandbox
 from deepagents import create_deep_agent
 from deepagents.backends.protocol import ExecuteResponse
+from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from langsmith import traceable
@@ -26,9 +28,15 @@ DOC_DOMAINS = ["readthedocs.io", "docs.python.org", "pydata.org", "scikit-learn.
                "sphinx-doc.org", "pytest.org", "palletsprojects.com", "astropy.org", "xarray.dev", "numpy.org",
                "scipy.org", "python-requests.org"]
 
+EXPLORE_LIMIT = 16  # look-around tool calls before the first submit_test
+RETRY_ALLOWANCE = 6  # more after each submission, to act on what was rejected
+WRITE_TOOLS = {"write_file", "edit_file", "submit_test"}
+
 PROMPT = f"""You write ONE pytest file that reproduces a reported bug in the repository at /testbed.
 
-Work in this order and be quick (aim for submit_test within ~15 tool calls):
+Work in this order and be quick. You get {EXPLORE_LIMIT} look-around tool calls (reading, searching, running
+commands) before your first submit_test, and {RETRY_ALLOWANCE} more after each one; past that only write_file,
+edit_file and submit_test work.
 1. Find the code the issue is about: grep / read only the few relevant files.
 2. Write {TEST_PATH} with write_file.
 3. Call submit_test right away. It runs your file on a clean copy of the repo and returns the pytest output.
@@ -76,6 +84,30 @@ class SafeSandbox(ContreeSandbox):
                 self._session = type(self._session)(self._session)  # restart from the last good snapshot
                 out = ExecuteResponse(output=f"sandbox error: {type(e).__name__}: {e}", exit_code=1)
         return sandbox.record(self.log, command, out)
+
+
+class ExplorationBudget(AgentMiddleware):
+    """Past the limit, look-around tools answer with an instruction instead of running.
+
+    A warning alone didn't work: the writer kept probing until the sandbox budget ran out (seen: 40 commands
+    and no test file). Writing and submitting always run.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.left = EXPLORE_LIMIT
+
+    async def awrap_tool_call(self, request, handler):
+        name = request.tool_call["name"]
+        if name == "submit_test":
+            self.left = RETRY_ALLOWANCE
+        elif name not in WRITE_TOOLS:
+            if self.left <= 0:
+                return ToolMessage(f"[receipts] Look-around budget used up, so {name} did not run. Write "
+                                   f"{TEST_PATH} with write_file from what you know now, then call submit_test.",
+                                   tool_call_id=request.tool_call["id"], name=name)
+            self.left -= 1
+        return await handler(request)
 
 
 class Scope(BaseModel):
@@ -211,7 +243,7 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         return "ACCEPTED. Stop now."
 
     agent = create_deep_agent(model=config.llm("writer"), tools=[docs_search, submit_test],
-                              system_prompt=PROMPT, backend=backend)
+                              system_prompt=PROMPT, backend=backend, middleware=[ExplorationBudget()])
     stopped = ""
     try:
         await agent.ainvoke({"messages": [{"role": "user", "content": f"Issue:\n\n{issue}"}]},
