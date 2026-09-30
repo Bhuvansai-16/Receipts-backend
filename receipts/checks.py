@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from . import config, engine
 
 MAX_CONCURRENT_CHECKS = 2  # whole server: sandbox quota + Token Factory credit
+STOPPED = "Stopped before it finished."
 log = logging.getLogger("uvicorn.error")
 
 
@@ -20,6 +21,9 @@ class LiveRun:
     """Progress of a run while it is active; once finished, the stored evidence takes over."""
 
     id: str
+    user_id: str | None = None
+    source: dict | None = None  # pull request details, shown while the run is live
+    task: asyncio.Task | None = None
     events: list[dict] = field(default_factory=list)
     listeners: set = field(default_factory=set)
 
@@ -54,11 +58,20 @@ async def launch(runs, user_id, run_id, instance_id, pr_kind, prepare, *, source
     downloads and environment setup show up as progress instead of blocking the request."""
     await runs.create(run_id, user_id, instance_id, pr_kind, source=source and {
         k: source[k] for k in ("repo", "pr_number", "head_sha")})
-    live = LIVE[run_id] = LiveRun(run_id)
-    task = asyncio.create_task(_execute(live, instance_id, prepare, runs, source, on_start, on_finish))
+    live = LIVE[run_id] = LiveRun(run_id, user_id, source)
+    task = live.task = asyncio.create_task(_execute(live, instance_id, prepare, runs, source, on_start, on_finish))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return run_id
+
+
+def cancel(run_id: str, user_id: str) -> bool:
+    """Stop a live run started by `user_id`. Sandbox work in flight is abandoned; the run ends as an error."""
+    live = LIVE.get(run_id)
+    if live is None or live.user_id != user_id or live.task is None or live.task.done():
+        return False
+    live.task.cancel()
+    return True
 
 
 async def _execute(live, instance_id, prepare, runs, source, on_start, on_finish) -> None:
@@ -75,6 +88,9 @@ async def _execute(live, instance_id, prepare, runs, source, on_start, on_finish
             # "done" is sent below, after the evidence is stored, so clients never read a half-written run
             evidence = await engine.check(target, patch, emit=lambda t, d: t != "done" and live.publish(t, d))
             status = "done"
+    except asyncio.CancelledError:  # the owner pressed Stop (see cancel)
+        live.publish("error", {"message": STOPPED})
+        evidence["reason"] = STOPPED
     except Exception as e:  # engine.check never raises by design; downloads, the sandbox or the database can
         live.publish("error", {"message": f"{type(e).__name__}: {e}"})
         evidence["reason"] = f"{type(e).__name__}: {e}"

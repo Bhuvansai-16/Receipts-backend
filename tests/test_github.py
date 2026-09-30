@@ -153,7 +153,8 @@ def test_check_button_starts_a_run_and_a_check_run(client, gh):
     row = client.store.rows[run_id]
     assert got["status"] == "done" and got["evidence"]["verdict"] == "PROVEN"
     assert got["evidence"]["source"] == {"repo": "octo/hello", "pr_number": 12, "head_sha": "head1",
-                                         "url": "https://github.com/octo/hello/pull/12"}
+                                         "url": "https://github.com/octo/hello/pull/12", "title": "Fix crash",
+                                         "linked_issue": 3}
     assert (row["repo"], row["pr_number"], row["head_sha"], row["check_run_id"]) == ("octo/hello", 12, "head1", 555)
     create, complete = [c for c in gh.calls if "/check-runs" in c.url.path]
     assert json.loads(create.content)["details_url"] == f"http://localhost:5173/runs/{run_id}"
@@ -201,3 +202,10 @@ def test_a_running_pr_check_already_names_its_pull_request(client):
     ev = client.get("/api/runs/r-live").json()["evidence"]
     assert ev["repo"] == "octo/hello"
     assert ev["source"] == {**source, "url": "https://github.com/octo/hello/pull/12"}
+
+
+def test_pr_receipts_carry_the_pr_title_and_linked_issue(client):
+    signed_in(client).post("/api/github/installations/sync")
+    run_id = client.post("/api/github/repos/octo/hello/pulls/12/check").json()["run_id"]
+    source = wait_for(client, run_id)["evidence"]["source"]
+    assert (source["title"], source["linked_issue"]) == ("Fix crash", 3)

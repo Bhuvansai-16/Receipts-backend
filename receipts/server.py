@@ -169,13 +169,23 @@ async def get_run(run_id: str, runs=Depends(runs_store)) -> Response:
             events.append({"type": "error", "data": {"message": row["reason"]}})
         evidence = {"instance_id": row["instance_id"], "started_at": row["started_at"], "events": events}
         if row.get("repo"):  # a pull request check: name it while it runs, as the finished receipt will
-            evidence.update(repo=row["repo"], source={
+            evidence.update(repo=row["repo"], source=(live.source if live and live.source else {
                 "repo": row["repo"], "pr_number": row["pr_number"], "head_sha": row["head_sha"],
-                "url": f"https://github.com/{row['repo']}/pull/{row['pr_number']}"})
+                "url": f"https://github.com/{row['repo']}/pull/{row['pr_number']}"}))
     finished = row["status"] in ("done", "error")
     return Response(_dumps({"status": row["status"], "evidence": {**evidence, "pr": evidence.get("pr") or row["pr"]}}),
                     media_type="application/json",
                     headers={"Cache-Control": "public, max-age=31536000, immutable" if finished else "no-store"})
+
+
+@app.post("/api/runs/{run_id}/cancel", status_code=202)
+async def cancel_run(run_id: str, user: dict = Depends(auth.current_user), runs=Depends(runs_store)) -> dict:
+    row = await _stored(run_id, runs)
+    if row["user_id"] != user["id"]:
+        raise HTTPException(404, "No such run.")  # someone else's run: don't reveal that it exists
+    if row["status"] not in ("queued", "running") or not checks.cancel(run_id, user["id"]):
+        raise HTTPException(409, "This check has already finished.")
+    return {"ok": True}
 
 
 @app.get("/api/runs/{run_id}/events")

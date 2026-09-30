@@ -134,9 +134,10 @@ async def pulls(owner: str, name: str, user: dict = Depends(auth.current_user), 
         "latest": latest.get(p["number"])} for p in prs]}
 
 
-async def start_pr_check(runs, user_id: str, repo: dict, number: int, head_sha: str, pr_url: str) -> str:
-    """Run a check on a PR and mirror it into a 'Receipts' check run on GitHub."""
+async def start_pr_check(runs, user_id: str, repo: dict, pr: dict) -> str:
+    """Run a check on a PR (GitHub's pull request object) and mirror it into a 'Receipts' check run."""
     full, repo_id, inst = repo["full_name"], repo["id"], repo["installation_id"]
+    number, head_sha = pr["number"], pr["head"]["sha"]
     safe = re.sub(r"[^A-Za-z0-9_.-]", "-", full.replace("/", "__"))
     run_id = engine.new_run_id(f"{safe}-pr{number}", "github", taken=LIVE)
     details = f"{config.FRONTEND_URL}/runs/{run_id}"
@@ -155,7 +156,8 @@ async def start_pr_check(runs, user_id: str, repo: dict, number: int, head_sha: 
         await github_app.finish_check(inst, repo_id, full, check.get("id"), evidence.get("verdict") or "UNPROVEN",
                                       evidence.get("reason") or "the check failed to run", details)
 
-    source = {"repo": full, "pr_number": number, "head_sha": head_sha, "url": pr_url}
+    source = {"repo": full, "pr_number": number, "head_sha": head_sha, "url": pr["html_url"],
+              "title": pr.get("title"), "linked_issue": targets.linked_issue(pr.get("body"))}
     return await checks.launch(runs, user_id, run_id, f"{full}#{number}", "github", prepare, source=source,
                                on_start=on_start, on_finish=on_finish)
 
@@ -173,7 +175,7 @@ async def check_pull(owner: str, name: str, number: int, user: dict = Depends(au
         raise HTTPException(404 if e.status == 404 else 502, "Couldn't read that pull request.") from e
     if pr.get("state") != "open":
         raise HTTPException(409, "Only open pull requests can be checked.")
-    return {"run_id": await start_pr_check(runs, user["id"], repo, number, pr["head"]["sha"], pr["html_url"])}
+    return {"run_id": await start_pr_check(runs, user["id"], repo, pr)}
 
 
 def _first_delivery(delivery: str) -> bool:
@@ -216,5 +218,4 @@ async def _auto_check(runs, payload: dict) -> None:
         log.info("auto-check skipped for %s#%s: %s", repo["full_name"], pr["number"], e.detail)
         return
     await start_pr_check(runs, owner, {"id": repo["id"], "full_name": repo["full_name"],
-                                       "installation_id": payload["installation"]["id"]},
-                         pr["number"], head, pr["html_url"])
+                                       "installation_id": payload["installation"]["id"]}, pr)

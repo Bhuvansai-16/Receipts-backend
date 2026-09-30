@@ -230,3 +230,22 @@ def test_without_a_database_saved_runs_are_served(monkeypatch, tmp_path):
 
 def test_github_repos_are_served_and_need_sign_in(api):
     assert api.get("/api/github/repos").status_code == 401
+
+
+def test_owner_can_stop_a_running_check(api, monkeypatch):
+    import asyncio as aio
+
+    async def slow_check(inst, patch, emit=None):
+        emit("claim", {"kind": "fix", "claim": "c"})
+        await aio.sleep(60)
+
+    monkeypatch.setattr(server.engine, "check", slow_check)
+    run_id = start(signed_in(api))
+    server.app.dependency_overrides[auth.current_user] = lambda: {**USER, "id": "someone-else"}
+    assert api.post(f"/api/runs/{run_id}/cancel").status_code == 404
+    server.app.dependency_overrides[auth.current_user] = lambda: USER
+    assert api.post(f"/api/runs/{run_id}/cancel").status_code == 202
+    assert sse_types(api, run_id)[-2:] == ["error", "done"]
+    got = api.get(f"/api/runs/{run_id}").json()
+    assert got["status"] == "error" and got["evidence"]["reason"] == "Stopped before it finished."
+    assert api.post(f"/api/runs/{run_id}/cancel").status_code == 409  # already finished
