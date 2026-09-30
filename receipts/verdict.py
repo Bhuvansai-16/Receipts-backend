@@ -47,6 +47,9 @@ def repro_check(run: PytestRun) -> tuple[bool, str]:
     if not run.results:
         return False, "no tests ran (syntax/import/collection error or sandbox error)"
     for n, r in run.results.items():
+        if r.exc == "CollectionError" and "in <module>" in r.msg and "AssertionError" in r.msg:
+            return False, (f"{n}: an assert at module level ran while pytest imported the file, so no test ran. "
+                           "Put every assert inside a def test_...() function.")
         if r.outcome != "passed" and not (r.outcome == "failed" and r.exc == "AssertionError"):
             return False, f"{n}: {r.outcome} with {r.exc}: {r.msg[:200]} (only AssertionError failures count)"
     if not _failing(run):

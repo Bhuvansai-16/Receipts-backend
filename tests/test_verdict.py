@@ -147,3 +147,10 @@ def test_suite_candidates():
     base = R({"a": ("passed",), "b": ("passed",), "c": ("failed", "E", "")})
     pr = R({"a": ("passed",), "b": ("failed", "E", ""), "c": ("failed", "E", "")})
     assert suite_candidates(base, pr) == ["b"]
+
+
+def test_repro_explains_an_assert_at_module_level():
+    # Seen twice: the writer's assert ran at import time, and "CollectionError" alone never got it fixed.
+    msg = 'receipts_test.py:7: in <module>\n    assert result == -z**2\nE   AssertionError: Expected -z**2'
+    ok, reason = repro_check(R({"receipts_test.py": ("error", "CollectionError", msg)}))
+    assert not ok and "module level" in reason and "def test_" in reason

@@ -82,11 +82,14 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
 
-    async def scope_check(issue, test_code):
+    async def scope_check(issue, test_code, cases):
         return writer.Scope(faithful_tests=["test_bug"], reason="ok")
 
+    async def stated_cases(issue):
+        return []
+
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
-                     ("scope_check", scope_check)]:
+                     ("scope_check", scope_check), ("stated_cases", stated_cases)]:
         monkeypatch.setattr(writer, name, fn)
     out = asyncio.run(writer.write_test("issue", object()))
     assert out.test_code == "def test_bug(): assert 1 == 2" and out.attempts == 1 and Backend.closed
@@ -122,15 +125,19 @@ def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=No
     async def run_pytest(image, args, files):
         return PytestRun({k: TestResult(*v) for k, v in results.items()})
 
-    async def scope_check(issue, test_code):
-        scope.seen = test_code
-        return writer.Scope(faithful_tests=scope.faithful, reason="test_extra adds POST expectations")
+    async def scope_check(issue, test_code, cases):
+        scope.seen, scope.cases_seen = test_code, cases
+        return writer.Scope(faithful_tests=scope.faithful, reason="test_extra adds POST expectations",
+                            missing=getattr(scope, "missing", []))
+
+    async def stated_cases(issue):
+        return getattr(scope, "cases", [])
 
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: make_agent(k) if make_agent else Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
-                     ("scope_check", scope_check)]:
+                     ("scope_check", scope_check), ("stated_cases", stated_cases)]:
         monkeypatch.setattr(writer, name, fn)
     return asyncio.run(writer.write_test("issue", object(), emit))
 
@@ -192,6 +199,7 @@ def test_writer_streams_its_command_count(monkeypatch):
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
+    monkeypatch.setattr(writer, "stated_cases", lambda issue: asyncio.sleep(0, []))
     out = asyncio.run(writer.write_test("issue", object(), lambda t, d: seen.append((t, d))))
     assert [d["commands"] for t, d in seen if t == "writer_progress"] == [1, 2]
     assert [e["cmd"] for e in out.log] == ["ls", "cat requests/models.py"]
@@ -276,6 +284,7 @@ def test_writer_agent_runs_with_the_exploration_budget(monkeypatch):
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
+    monkeypatch.setattr(writer, "stated_cases", lambda issue: asyncio.sleep(0, []))
     asyncio.run(writer.write_test("issue", object()))
     assert any(isinstance(m, writer.ExplorationBudget) for m in seen["middleware"])
 
@@ -296,3 +305,44 @@ def test_agent_run_ends_as_soon_as_a_test_is_accepted(monkeypatch):
                            make_agent=lambda k: Agent(k["tools"]))
     assert after == [] and out.test_code is not None and out.attempts == 1
     assert "agent stopped" not in out.reason
+
+
+def test_unchanged_resubmissions_are_not_attempts_and_end_the_run(monkeypatch):
+    # Seen: the same broken file was auto-submitted four times and used up four of five attempts.
+    replies, after = [], []
+
+    class Agent:
+        def __init__(self, tools):
+            self.submit = next(t for t in tools if t.name == "submit_test")
+
+        async def ainvoke(self, *a, **k):
+            for _ in range(10):
+                replies.append(await self.submit.ainvoke({}))
+            after.append("kept going")
+
+    broken = {"receipts_test.py": ("error", "CollectionError", "ImportError: no module x")}
+    out = _fake_writer_run(monkeypatch, CODE, broken, SimpleNamespace(faithful=[]),
+                           make_agent=lambda k: Agent(k["tools"]))
+    assert out.attempts == 1 and after == [] and len(replies) == writer.UNCHANGED_LIMIT
+    assert "unchanged" in replies[1] and "not counted" in replies[1]
+
+
+def test_rejected_when_the_tests_leave_out_what_the_issue_states(monkeypatch):
+    # Seen: the issue said Abs(z)**4 == z**4 too; a test of Abs(z)**2 alone let a half-right PR read PROVEN.
+    scope = SimpleNamespace(faithful=["test_bug"], missing=["Abs(z)**4 == z**4 for imaginary z"])
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, scope)
+    assert out.test_code is None and "Abs(z)**4 == z**4" in out.reason
+
+
+def test_cases_come_from_the_issue_alone_and_reach_writer_and_reviewer(monkeypatch):
+    # Shown only an Abs(z)**2 test, the reviewer listed only that case: cases must not come from the tests.
+    first = {}
+
+    class Agent:
+        async def ainvoke(self, state, **k):
+            first["message"] = state["messages"][0]["content"]
+
+    cases = ["Abs(z)**2 == -z**2", "Abs(z)**4 == z**4"]
+    scope = SimpleNamespace(faithful=["test_bug"], cases=cases)
+    _fake_writer_run(monkeypatch, CODE, RESULTS, scope, make_agent=lambda k: Agent())
+    assert all(c in first["message"] for c in cases) and scope.cases_seen == cases

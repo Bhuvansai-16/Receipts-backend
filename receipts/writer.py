@@ -14,7 +14,7 @@ from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from langsmith import traceable
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import config, sandbox
 from .sandbox import ACTIVATE, ENV, TEST_ARGS, TEST_PATH, run_pytest, text
@@ -31,6 +31,7 @@ DOC_DOMAINS = ["readthedocs.io", "docs.python.org", "pydata.org", "scikit-learn.
 EXPLORE_LIMIT = 16  # look-around tool calls before the first submit_test
 RETRY_ALLOWANCE = 6  # more after each submission, to act on what was rejected
 WRITE_TOOLS = {"write_file", "edit_file", "submit_test"}
+UNCHANGED_LIMIT = 2  # resubmissions of an unchanged test file before the run ends
 
 PROMPT = f"""You write ONE pytest file that reproduces a reported bug in the repository at /testbed.
 
@@ -53,6 +54,8 @@ Rules:
   an assertion: `except TypeError as e: assert False, f"raised {{e!r}}"`. Don't use pytest.raises for this.
 - Test functions must be named test_* at module level so pytest collects them.
 - Test ONLY what the issue describes, the way it describes it: prefer the issue's own example, API and inputs.
+- Cover every concrete case the issue says is wrong now (each example with its expected result), not just the
+  first one; a reviewer rejects tests that leave one out.
   No extra cases, other methods/verbs, or stricter checks the issue doesn't ask for; a reviewer rejects
   tests that go beyond the issue.
 - Keep it small: 1-2 focused test functions, no network access, no new dependencies.
@@ -119,20 +122,47 @@ class ExplorationBudget(AgentMiddleware):
         return await handler(request)
 
 
+class Cases(BaseModel):
+    cases: list[str] = Field(description=(
+        "Every concrete expectation the report states, each as an input with the result it should give "
+        "(e.g. 'f(2) == 4'), including worked examples of a general rule and ones in parentheses. "
+        "Empty if it gives none."))
+
+
+@traceable(name="stated_cases")
+async def stated_cases(issue: str) -> list[str]:
+    """The concrete cases the issue itself states, read from the issue alone. Shown only a partial test, the
+    reviewer listed only the cases that test covers, so a half-right PR could read PROVEN."""
+    prompt = ("List every concrete expectation this bug report states: an input with the result it should give, "
+              "including worked examples of a general rule and ones stated in passing or in parentheses.\n\n"
+              f"Bug report:\n{issue[:8000]}")
+    try:
+        return (await config.llm("scope").with_structured_output(Cases, method="function_calling")
+                .ainvoke(prompt)).cases
+    except Exception:  # ponytail: no list means no coverage gate, as before it existed
+        return []
+
+
 class Scope(BaseModel):
     faithful_tests: list[str]
     reason: str
+    missing: list[str] = Field(default_factory=list, description=(
+        "The listed cases that no test asserts. Empty if every one is covered."))
 
 
 @traceable(name="scope_check")
-async def scope_check(issue: str, test_code: str) -> Scope:
-    """Blind review (issue + tests only): which tests assert just what the issue asks?"""
+async def scope_check(issue: str, test_code: str, cases: list[str]) -> Scope:
+    """Blind review (issue + tests only): which tests assert just what the issue asks, and which of the
+    issue's cases does no test cover?"""
+    listed = "".join(f"\n- {c}" for c in cases)
     prompt = (
         "The pytest tests below were written from the bug report below, and each fails on the current code. "
         "List in faithful_tests the names of the tests that assert only behaviour the report says is wrong, with "
         "expectations the report states or clearly implies, and that have no mistakes of their own (for example a "
         "name or docstring claiming something the test doesn't do). Leave out any test that adds other cases, "
-        "methods, inputs or expectations the report doesn't ask for, and say in reason what you left out and why.\n\n"
+        "methods, inputs or expectations the report doesn't ask for, and say in reason what you left out and why. "
+        + (f"The report states these expectations, and a test may assert any of them:{listed}\n"
+           "In missing, copy the text of each one that no test asserts.\n\n" if cases else "\n\n") +
         f"Bug report:\n{issue[:8000]}\n\nTests:\n```python\n{test_code}\n```"
     )
     return await config.llm("scope").with_structured_output(Scope, method="function_calling").ainvoke(prompt)
@@ -220,21 +250,30 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
     async def submit_test() -> str:
         """Submit /testbed/receipts_test.py. It is re-run on a clean copy of the repo and checked."""
         message = await submit()
-        if out.test_code is not None or out.attempts >= config.MAX_TEST_ATTEMPTS:
+        if (out.test_code is not None or out.attempts >= config.MAX_TEST_ATTEMPTS
+                or last["repeats"] >= UNCHANGED_LIMIT):
             raise WriterDone
         return message
+
+    # Seen: one broken file auto-submitted four times, using up four of five attempts.
+    last = {"code": object(), "repeats": 0}  # the file as last submitted; unchanged resubmissions in a row
 
     async def check_submission() -> str:
         if out.test_code is not None:
             return "ACCEPTED already. Stop."
         if out.attempts >= config.MAX_TEST_ATTEMPTS:
             return "REJECTED: attempt limit reached. Stop now."
-        out.attempts += 1
         [dl] = await backend.adownload_files([TEST_PATH])
-        if dl.error or not dl.content:
+        code = None if dl.error or not dl.content else text(dl.content)
+        if code == last["code"]:
+            last["repeats"] += 1
+            return (f"REJECTED again, not counted as an attempt: {TEST_PATH} is unchanged since your last "
+                    f"submission, which was rejected: {out.reason}. Change the file before submitting.")
+        last["code"], last["repeats"] = code, 0
+        out.attempts += 1
+        if code is None:
             out.reason = f"could not read {TEST_PATH}: {dl.error}"
             return f"REJECTED: {out.reason}"
-        code = text(dl.content)
         run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: code.encode()})
         ok, out.reason = repro_check(run)
         if not ok:
@@ -243,11 +282,14 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         # sending the agent round again (it tends to run out of budget before resubmitting).
         failing = [n for n, r in run.results.items() if r.outcome != "passed"]
         reproducing = keep_tests(code, failing)
-        scope = await scope_check(issue, reproducing)
+        scope = await scope_check(issue, reproducing, cases)
         faithful = [n for n in failing if _test_name(n) in set(scope.faithful_tests)]
         if not faithful:
             out.reason = f"no test sticks to the issue: {scope.reason}"
             return f"REJECTED: {out.reason}\nAssert only what the issue asks for, then submit again."
+        if scope.missing:  # a partial test lets a half-right PR read PROVEN
+            out.reason = f"the tests leave out cases the issue states: {'; '.join(scope.missing)}"[:800]
+            return f"REJECTED: {out.reason}\nAdd a test for each, then submit again."
         trimmed = keep_tests(code, faithful)
         if trimmed != code:  # re-verify what remains reproduces on its own
             run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: trimmed.encode()})
@@ -257,11 +299,14 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         out.test_code, out.base_run, out.scope = trimmed, run, scope.reason
         return "ACCEPTED. Stop now."
 
+    cases = await stated_cases(issue)
     agent = create_deep_agent(model=config.llm("writer"), tools=[docs_search, submit_test],
                               system_prompt=PROMPT, backend=backend, middleware=[ExplorationBudget(submit_test)])
+    brief = f"Issue:\n\n{issue}" + ("\n\nCases the issue states (cover each):" + "".join(f"\n- {c}" for c in cases)
+                                     if cases else "")
     stopped = ""
     try:
-        await agent.ainvoke({"messages": [{"role": "user", "content": f"Issue:\n\n{issue}"}]},
+        await agent.ainvoke({"messages": [{"role": "user", "content": brief}]},
                             config={"recursion_limit": 150, "run_name": "blind_test_writer"})
     except WriterDone:
         pass
