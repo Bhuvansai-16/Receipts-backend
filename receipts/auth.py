@@ -4,6 +4,7 @@ Mirrors Neon's own server SDK proxy (github.com/neondatabase/neon-js, packages/a
 forwarded headers, the same cookie rewriting and the same OAuth session-verifier exchange, so the browser
 only ever talks to this API and every auth cookie is first-party. Docs: https://neon.com/docs/auth/overview
 """
+import asyncio
 import hashlib
 import json
 import logging
@@ -168,6 +169,20 @@ class SessionCache:
 
 
 sessions = SessionCache()
+_lookups: dict[str, asyncio.Future] = {}  # get-session calls in flight, shared by concurrent requests
+
+
+async def _lookup(cookies: str) -> dict | None:
+    upstream = await _call("GET", "get-session", query="", body=None, headers={
+        "cookie": cookies, "origin": config.FRONTEND_URL, "x-neon-auth-middleware": "true"})
+    try:
+        body = upstream.json() if upstream.status_code == 200 else None
+    except ValueError:
+        body = None
+    user = body.get("user") if isinstance(body, dict) else None
+    if user:
+        sessions.put(cookies, user)
+    return user
 
 
 async def current_user(request: Request) -> dict:
@@ -177,16 +192,14 @@ async def current_user(request: Request) -> dict:
         raise HTTPException(401, "Sign in to continue.")
     if (user := sessions.get(cookies)) is not None:
         return user
-    upstream = await _call("GET", "get-session", query="", body=None, headers={
-        "cookie": cookies, "origin": config.FRONTEND_URL, "x-neon-auth-middleware": "true"})
-    try:
-        body = upstream.json() if upstream.status_code == 200 else None
-    except ValueError:
-        body = None
-    user = body.get("user") if isinstance(body, dict) else None
+    # A page load fires several calls at once: they share one Neon lookup instead of one each.
+    key = SessionCache._key(cookies)
+    if (lookup := _lookups.get(key)) is None:
+        lookup = _lookups[key] = asyncio.ensure_future(_lookup(cookies))
+        lookup.add_done_callback(lambda _: _lookups.pop(key, None))
+    user = await asyncio.shield(lookup)  # one caller giving up must not cancel the others' lookup
     if not user:
         raise HTTPException(401, "Sign in to continue.")
-    sessions.put(cookies, user)
     return user
 
 

@@ -186,3 +186,23 @@ def test_duplicate_cookies_forward_the_last_and_clear_stale_paths(client, upstre
     deletions = [c for c in r.headers.get_list("set-cookie") if "Max-Age=0" in c]
     assert all(c.startswith("__Secure-neon-auth.session_token=;") for c in deletions)
     assert {c.split("Path=")[1].split(";")[0] for c in deletions} == {"/api/auth", "/api"}
+
+
+def test_concurrent_requests_share_one_session_lookup(monkeypatch, upstream):
+    """A page load fires several API calls at once; one expired cache entry must not become N Neon calls."""
+    import asyncio
+
+    calls = []
+
+    async def slow(request):
+        calls.append(request)
+        await asyncio.sleep(0.05)
+        return httpx.Response(200, json={"user": USER})
+
+    monkeypatch.setattr(auth, "_client", auth._new_client(httpx.MockTransport(slow)))
+    req = SimpleNamespace(headers={"cookie": SESSION})
+
+    async def go():
+        return await asyncio.gather(*(auth.current_user(req) for _ in range(6)))
+
+    assert [u["id"] for u in asyncio.run(go())] == ["u1"] * 6 and len(calls) == 1

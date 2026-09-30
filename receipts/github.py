@@ -4,9 +4,11 @@ Access rule: a user reaches a repository only through an installation GitHub its
 (GET /user/installations with their own token); the setup redirect's installation_id is never trusted.
 Tokens stay on the server; installation tokens are scoped per call (github_app.installation_token).
 """
+import asyncio
 import json
 import logging
 import re
+import time
 from collections import OrderedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -20,6 +22,10 @@ router = APIRouter(prefix="/api/github")
 log = logging.getLogger("uvicorn.error")
 PR_ACTIONS = {"opened", "synchronize", "reopened", "ready_for_review"}
 _deliveries: OrderedDict[str, None] = OrderedDict()  # recent X-GitHub-Delivery ids (GitHub may redeliver)
+# ponytail: per-process cache of each installation's repositories (GitHub's list call is ~1 s), cleared by
+# Refresh and install webhooks; move it to the database if the API ever runs as several processes.
+REPO_LIST_TTL_S = 60
+_repo_lists: dict[int, tuple[float, list[dict]]] = {}
 
 
 class AutoCheck(BaseModel):
@@ -63,6 +69,8 @@ async def _sync(request: Request, user: dict, runs) -> list[dict]:
     confirmed = [{"id": i["id"], "account_login": i["account"]["login"], "account_type": i["account"]["type"]}
                  for i in r.json().get("installations", []) if str(i.get("app_id")) == str(config.GITHUB_APP_ID)]
     await runs.sync_installations(user["id"], confirmed)
+    for i in confirmed:
+        _repo_lists.pop(i["id"], None)
     return confirmed
 
 
@@ -85,14 +93,21 @@ async def setup(request: Request, runs=Depends(_runs)) -> RedirectResponse:
     return RedirectResponse(f"{config.FRONTEND_URL}/app/repos?installed=1", status_code=302)
 
 
+async def _installation_repos(installation_id: int) -> list[dict]:
+    if (hit := _repo_lists.get(installation_id)) and hit[0] > time.monotonic():
+        return hit[1]
+    token = await _gh(github_app.installation_token(installation_id, None, {"metadata": "read"}))
+    r = await _gh(github_app.api(token, "GET", "/installation/repositories", params={"per_page": 100}))
+    repos = [{"id": x["id"], "full_name": x["full_name"], "private": x["private"], "language": x.get("language"),
+              "description": x.get("description"), "pushed_at": x.get("pushed_at"), "url": x["html_url"],
+              "installation_id": installation_id} for x in r.json().get("repositories", [])]
+    _repo_lists[installation_id] = (time.monotonic() + REPO_LIST_TTL_S, repos)
+    return repos
+
+
 async def _user_repos(user: dict, runs) -> list[dict]:
-    repos = []
-    for inst in await runs.user_installations(user["id"]):
-        token = await _gh(github_app.installation_token(inst["id"], None, {"metadata": "read"}))
-        r = await _gh(github_app.api(token, "GET", "/installation/repositories", params={"per_page": 100}))
-        repos += [{"id": x["id"], "full_name": x["full_name"], "private": x["private"], "language": x.get("language"),
-                   "description": x.get("description"), "pushed_at": x.get("pushed_at"), "url": x["html_url"],
-                   "installation_id": inst["id"]} for x in r.json().get("repositories", [])]
+    lists = await asyncio.gather(*(_installation_repos(i["id"]) for i in await runs.user_installations(user["id"])))
+    repos = [r for rs in lists for r in rs]
     autos = await runs.auto_checks([r["id"] for r in repos])
     return [{**r, "auto_check": r["id"] in autos} for r in repos]
 
@@ -197,6 +212,8 @@ async def webhook(request: Request, runs=Depends(_runs)) -> dict:
     if not _first_delivery(request.headers.get("x-github-delivery", "")):
         return {"ok": True, "duplicate": True}
     event, payload = request.headers.get("x-github-event"), json.loads(body)
+    if event in ("installation", "installation_repositories"):
+        _repo_lists.pop(payload["installation"]["id"], None)
     if event == "installation" and payload.get("action") == "deleted":
         await runs.delete_installation(payload["installation"]["id"])
     elif event == "pull_request" and payload.get("action") in PR_ACTIONS and not payload["pull_request"].get("draft"):

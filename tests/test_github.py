@@ -64,6 +64,7 @@ def gh(monkeypatch):
     monkeypatch.setattr(engine, "check", fake_check)
     github_app._tokens.clear()
     github._deliveries.clear()
+    github._repo_lists.clear()
     auth.sessions.items.clear()
     return fake
 
@@ -209,3 +210,20 @@ def test_pr_receipts_carry_the_pr_title_and_linked_issue(client):
     run_id = client.post("/api/github/repos/octo/hello/pulls/12/check").json()["run_id"]
     source = wait_for(client, run_id)["evidence"]["source"]
     assert (source["title"], source["linked_issue"]) == ("Fix crash", 3)
+
+
+def test_repo_lists_are_read_from_github_once_a_minute(client, gh):
+    def lists():
+        return len([c for c in gh.calls if c.url.path == "/installation/repositories"])
+
+    signed_in(client).post("/api/github/installations/sync")
+    client.get("/api/github/repos")
+    client.get("/api/github/repos/octo/hello/pulls")
+    client.put("/api/github/repos/42/auto-check", json={"enabled": True})
+    assert lists() == 1
+    client.post("/api/github/installations/sync")  # the Refresh button re-reads GitHub
+    client.get("/api/github/repos")
+    assert lists() == 2
+    webhook(client, {"action": "added", "installation": {"id": 7}}, event="installation_repositories")
+    client.get("/api/github/repos")
+    assert lists() == 3
