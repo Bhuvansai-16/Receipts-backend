@@ -421,3 +421,10 @@ def test_rejected_when_a_test_would_still_fail_after_a_correct_fix(monkeypatch):
     scope = SimpleNamespace(faithful=["test_bug", "test_extra"], broken=["test_extra()"])
     out = _fake_writer_run(monkeypatch, CODE, RESULTS, scope)
     assert out.test_code is None and "test_extra would still fail after a correct fix" in out.reason
+
+
+def test_every_counted_submission_is_kept_with_its_code_and_reason(monkeypatch):
+    # #15 and #16 ended "passed on the unpatched code" with no way to see the file that did it.
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=[]))
+    assert [(s["attempt"], s["accepted"], s["code"]) for s in out.submissions] == [(1, False, CODE)]
+    assert "sticks to the issue" in out.submissions[0]["reason"]

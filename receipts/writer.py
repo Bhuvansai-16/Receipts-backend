@@ -255,6 +255,7 @@ class WriterResult:
     queries: list[str] = field(default_factory=list)
     log: list[dict] = field(default_factory=list)
     scope: str = ""  # what the scope check pruned and why
+    submissions: list[dict] = field(default_factory=list)  # every counted attempt: its file and verdict
 
 
 class _CommandLog(list):
@@ -288,6 +289,8 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         if out.attempts > before:  # a real attempt (not "already accepted" / "limit reached")
             emit("writer_submit", {"attempt": out.attempts, "accepted": out.test_code is not None,
                                    "reason": out.reason[:300]})
+            out.submissions.append({"attempt": out.attempts, "accepted": out.test_code is not None,
+                                    "reason": out.reason, "code": last["code"]})
         return message
 
     @tool

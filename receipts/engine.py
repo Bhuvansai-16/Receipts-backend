@@ -165,7 +165,8 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     say("env_ready")
     w = await write_test(inst.problem_statement, base, say)
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
-                    "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log}
+                    "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
+                    "submissions": getattr(w, "submissions", [])}
     if w.test_code is None:
         return Verdict.UNPROVEN, f"no valid reproducing test after {w.attempts} attempt(s): {w.reason}"
     say("test_accepted", {"attempts": w.attempts})
