@@ -1,6 +1,7 @@
 import asyncio
 import io
 import tarfile
+from types import SimpleNamespace
 
 from receipts import engine, targets
 
@@ -41,7 +42,7 @@ def test_tar_files_strips_the_top_folder():
 
 
 def test_env_setup_failure_is_unproven(monkeypatch):
-    target = targets.RepoTarget("octo/hello#1", "octo/hello", "Crash on empty list", b"", "sha", [])
+    target = targets.RepoTarget("octo/hello#1", "octo/hello", "Crash on empty list", "sha", [], None)
 
     async def broken():
         raise targets.EnvironmentSetupError("setting up octo/hello failed: pip install failed")
@@ -54,3 +55,33 @@ def test_env_setup_failure_is_unproven(monkeypatch):
     ev = asyncio.run(engine.check(target, "diff --git a/x b/x\n"))
     assert ev["verdict"] == "UNPROVEN" and "pip install failed" in ev["reason"]
     assert ev["instance_id"] == "octo/hello#1" and ev["repo"] == "octo/hello"
+
+
+def test_base_image_downloads_the_repo_once_and_picks_the_suite(monkeypatch):
+    """The download happens inside base_image, which runs alongside classification; a cached env skips it."""
+    downloads = []
+    tarball = make_tarball({"octo-hello-abc/pkg/calc.py": b"", "octo-hello-abc/tests/test_calc.py": b""})
+
+    async def fetch():
+        downloads.append(1)
+        return tarball
+
+    class Image:
+        exit_code = 0
+
+        async def run(self, **kw):
+            assert kw["files"]["/tmp/src.tar.gz"] == tarball
+            return self
+
+    class Images:
+        async def oci(self, ref):
+            return Image()
+
+    monkeypatch.setattr(targets.config, "SANDBOX_PROVIDER", "contree")
+    monkeypatch.setattr(targets.config, "contree", lambda: SimpleNamespace(images=Images()))
+    monkeypatch.setattr(targets, "_envs", {})
+    first = targets.RepoTarget("octo/hello#1", "octo/hello", "claim", "sha", ["pkg/calc.py"], fetch)
+    again = targets.RepoTarget("octo/hello#2", "octo/hello", "claim", "sha", ["pkg/calc.py"], fetch)
+    asyncio.run(first.base_image())
+    asyncio.run(again.base_image())
+    assert downloads == [1] and first.suite == again.suite == ["tests/test_calc.py"]

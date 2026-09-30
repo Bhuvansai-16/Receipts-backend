@@ -2,6 +2,7 @@
 import io
 import re
 import tarfile
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
@@ -24,7 +25,7 @@ pip install -q --disable-pip-version-check -e '.[test]' || pip install -q -e '.[
   || pip install -q -e '.[dev]' || pip install -q -e . || true
 for f in requirements*.txt requirements/*.txt; do if [ -f "$f" ]; then pip install -q -r "$f" || true; fi; done
 pip install -q pytest"""
-_envs: dict[tuple[str, str], object] = {}
+_envs: dict[tuple[str, str], tuple[object, set[str]]] = {}  # (repo, base sha) -> (env image, its files)
 
 
 class EnvironmentSetupError(RuntimeError):
@@ -60,23 +61,29 @@ class RepoTarget:
     instance_id: str  # owner/repo#number
     repo: str
     problem_statement: str
-    tarball: bytes = field(repr=False)
     base_sha: str
-    suite: list[str]
+    changed: list[str]  # files the PR touches
+    fetch: Callable[[], Awaitable[bytes]] = field(repr=False)  # the repo's tarball at base_sha
+    suite: list[str] = field(default_factory=list)  # set by base_image
     pass_to_pass: list[str] = field(default_factory=list)
 
     async def base_image(self):
+        """The repo installed at base_sha. Downloads here, not in pr_target: the engine builds this while it
+        classifies the claim, and a cached environment needs no download at all."""
         if config.SANDBOX_PROVIDER != "contree":
             raise EnvironmentSetupError("real repositories need SANDBOX_PROVIDER=contree (Nebius sandboxes)")
         key = (self.repo, self.base_sha)
         if key not in _envs:  # ponytail: per-process cache; a restart rebuilds it
+            tarball = await self.fetch()
             image = await config.contree().images.oci(PYTHON_IMAGE)
-            env = await image.run(shell=SETUP, files={"/tmp/src.tar.gz": self.tarball}, disposable=False,
+            env = await image.run(shell=SETUP, files={"/tmp/src.tar.gz": tarball}, disposable=False,
                                   timeout=config.SANDBOX_TIMEOUT_S)
             if env.exit_code != 0:
                 raise EnvironmentSetupError(f"setting up {self.repo} failed: {text(env.stderr)[-300:].strip()}")
-            _envs[key] = env
-        return _envs[key]
+            _envs[key] = (env, tar_files(tarball))
+        env, files = _envs[key]
+        self.suite = suite_for(self.changed, files)
+        return env
 
 
 async def pr_target(installation_id: int, repo_id: int, full_name: str, number: int):
@@ -92,9 +99,13 @@ async def pr_target(installation_id: int, repo_id: int, full_name: str, number: 
     if n := linked_issue(pr.get("body")):
         r = await github_app.api(token, "GET", f"/repos/{full_name}/issues/{n}", ok=(200, 404, 410))
         issue = r.json() if r.status_code == 200 and "pull_request" not in r.json() else None
-    tar = await github_app.api(token, "GET", f"/repos/{full_name}/tarball/{base_sha}", follow_redirects=True)
-    if len(tar.content) > MAX_TARBALL_BYTES:
-        raise EnvironmentSetupError(f"{full_name} is larger than {MAX_TARBALL_BYTES // 1_000_000} MB")
-    suite = suite_for(changed_files(diff), tar_files(tar.content))
-    target = RepoTarget(f"{full_name}#{number}", full_name, claim_text(pr, issue), tar.content, base_sha, suite)
+
+    async def fetch() -> bytes:
+        token = await github_app.installation_token(installation_id, repo_id, READ)  # cached; may run later
+        tar = await github_app.api(token, "GET", f"/repos/{full_name}/tarball/{base_sha}", follow_redirects=True)
+        if len(tar.content) > MAX_TARBALL_BYTES:
+            raise EnvironmentSetupError(f"{full_name} is larger than {MAX_TARBALL_BYTES // 1_000_000} MB")
+        return tar.content
+
+    target = RepoTarget(f"{full_name}#{number}", full_name, claim_text(pr, issue), base_sha, changed_files(diff), fetch)
     return target, diff, head
