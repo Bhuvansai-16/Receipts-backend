@@ -183,3 +183,37 @@ def test_research_brief_reaches_the_writer(monkeypatch):
     ev = asyncio.run(engine.check(INST, PATCH))
     assert "docs" in seen["brief"] and ev["research"]["sources"] == [{"title": "t", "url": "u"}]
     assert "research" in [e["type"] for e in ev["events"]]
+
+
+def _writer_sequence(monkeypatch, results):
+    calls = []
+
+    async def write_test(issue, img, emit=None, **kw):
+        calls.append(kw)
+        code = results[len(calls) - 1]
+        return SimpleNamespace(test_code=code, attempts=1, reason="writer gave up" if code is None else "ok",
+                               log=[], submissions=[{"attempt": 1, "accepted": False, "reason": "r", "code": "x = 1"}])
+
+    monkeypatch.setattr(engine, "write_test", write_test)
+    return calls
+
+
+def test_writer_failure_gets_one_retry_on_the_stronger_model(monkeypatch):
+    calls = _writer_sequence(monkeypatch, [None, "def test_bug(): assert 1 == 2"])
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "PROVEN" and len(calls) == 2
+    assert calls[1]["role"] == "writer_strong" and "writer gave up" in calls[1]["history"]
+    assert ev["writer_first"]["reason"] == "writer gave up"
+    assert [e["type"] for e in ev["events"]].count("writer_retry") == 1
+
+
+def test_no_retry_when_the_first_test_is_accepted(monkeypatch):
+    calls = _writer_sequence(monkeypatch, ["def test_bug(): assert 1 == 2"])
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert len(calls) == 1 and "writer_first" not in ev
+
+
+def test_only_one_retry(monkeypatch):
+    calls = _writer_sequence(monkeypatch, [None, None])
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert len(calls) == 2 and ev["verdict"] == "UNPROVEN" and "no valid reproducing test" in ev["reason"]

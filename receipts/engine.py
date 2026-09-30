@@ -17,7 +17,7 @@ from . import config, research
 from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
 from .swebench import Instance
 from .verdict import PytestRun, Verdict, fix_verdict, restrict, suite_candidates
-from .writer import write_test
+from .writer import retry_history, write_test
 
 
 class Claim(BaseModel):
@@ -168,6 +168,13 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     ev["research"] = {"queries": brief.queries, "sources": brief.sources}
     say("research", {"sources": len(brief.sources)})
     w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer())
+    if w.test_code is None:  # the writer failed, not the PR, and no fork has run yet: one retry, never more
+        say("writer_retry", {"model": config.MODELS["writer_strong"], "why": w.reason[:300]})
+        first = w
+        w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer(),
+                             history=retry_history(first), role="writer_strong")
+        ev["writer_first"] = {"attempts": first.attempts, "reason": first.reason,
+                              "submissions": getattr(first, "submissions", [])}
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
                     "submissions": getattr(w, "submissions", [])}

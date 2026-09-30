@@ -442,3 +442,10 @@ def test_the_exception_the_issue_reports_gets_a_try_except_hint(monkeypatch):
     _fake_writer_run(monkeypatch, CODE, raised, SimpleNamespace(faithful=["test_bug"]),
                      make_agent=lambda k: Agent(k["tools"]), issue=issue)
     assert "the bug the issue reports" in replies[0] and "except TypeError as e" in replies[0]
+
+
+def test_retry_history_carries_the_last_rejection_and_file():
+    first = writer.WriterResult(reason="every test passed on the unpatched code",
+                                submissions=[{"attempt": 1, "accepted": False, "reason": "r", "code": "def test_a(): pass"}])
+    text = writer.retry_history(first)
+    assert "every test passed" in text and "def test_a(): pass" in text

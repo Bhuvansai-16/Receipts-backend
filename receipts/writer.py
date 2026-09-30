@@ -259,6 +259,13 @@ class WriterResult:
     submissions: list[dict] = field(default_factory=list)  # every counted attempt: its file and verdict
 
 
+def retry_history(first: WriterResult) -> str:
+    """What a failed attempt ended on, so the retry doesn't repeat it."""
+    last = first.submissions[-1]["code"] if first.submissions else None
+    return (f"\n\nA previous attempt at this test failed: {first.reason}"
+            + (f"\nIts last test file was:\n```python\n{last[:3000]}\n```\nDon't repeat its mistakes." if last else ""))
+
+
 class _CommandLog(list):
     """The sandbox backends append one entry per shell command; count them out loud for the live UI."""
 
