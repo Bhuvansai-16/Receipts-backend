@@ -101,7 +101,7 @@ def test_keep_tests_drops_tests_that_passed_on_base():
     assert "test_guard" not in kept and "__main__" not in kept  # runner block would call dropped tests
 
 
-def _fake_writer_run(monkeypatch, code, results, scope, emit=None):
+def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=None):
     class Agent:
         async def ainvoke(self, *a, **k):
             return None  # agent stops without submitting; the leftover file gets submitted
@@ -126,7 +126,7 @@ def _fake_writer_run(monkeypatch, code, results, scope, emit=None):
         scope.seen = test_code
         return writer.Scope(faithful_tests=scope.faithful, reason="test_extra adds POST expectations")
 
-    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
+    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: make_agent(k) if make_agent else Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
@@ -250,3 +250,21 @@ def test_writer_agent_runs_with_the_exploration_budget(monkeypatch):
     monkeypatch.setattr(writer, "blind_workspace", blind)
     asyncio.run(writer.write_test("issue", object()))
     assert any(isinstance(m, writer.ExplorationBudget) for m in seen["middleware"])
+
+
+def test_agent_run_ends_as_soon_as_a_test_is_accepted(monkeypatch):
+    # Seen: told "ACCEPTED. Stop now.", the writer kept probing for 77 s until its command budget ran out.
+    after = []
+
+    class Agent:
+        def __init__(self, tools):
+            self.submit = next(t for t in tools if t.name == "submit_test")
+
+        async def ainvoke(self, *a, **k):
+            await self.submit.ainvoke({})
+            after.append("kept going")
+
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=["test_bug"]),
+                           make_agent=lambda k: Agent(k["tools"]))
+    assert after == [] and out.test_code is not None and out.attempts == 1
+    assert "agent stopped" not in out.reason

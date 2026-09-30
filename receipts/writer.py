@@ -86,6 +86,12 @@ class SafeSandbox(ContreeSandbox):
         return sandbox.record(self.log, command, out)
 
 
+class TestAccepted(Exception):
+    """Ends the agent run once a test is accepted. Told to stop, the writer kept probing (seen: 77 s)."""
+
+    __test__ = False  # not a pytest test class
+
+
 class ExplorationBudget(AgentMiddleware):
     """Past the limit, look-around tools answer with an instruction instead of running.
 
@@ -199,14 +205,20 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         out.queries.append(query)
         return str(await tavily.ainvoke({"query": query}))[:6000]
 
-    @tool
-    async def submit_test() -> str:
-        """Submit /testbed/receipts_test.py. It is re-run on a clean copy of the repo and checked."""
+    async def submit() -> str:
         before = out.attempts
         message = await check_submission()
         if out.attempts > before:  # a real attempt (not "already accepted" / "limit reached")
             emit("writer_submit", {"attempt": out.attempts, "accepted": out.test_code is not None,
                                    "reason": out.reason[:300]})
+        return message
+
+    @tool
+    async def submit_test() -> str:
+        """Submit /testbed/receipts_test.py. It is re-run on a clean copy of the repo and checked."""
+        message = await submit()
+        if out.test_code is not None:
+            raise TestAccepted
         return message
 
     async def check_submission() -> str:
@@ -248,11 +260,13 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
     try:
         await agent.ainvoke({"messages": [{"role": "user", "content": f"Issue:\n\n{issue}"}]},
                             config={"recursion_limit": 150, "run_name": "blind_test_writer"})
+    except TestAccepted:
+        pass
     except Exception as e:  # command budget / recursion limit / model error
         stopped = f"agent stopped: {type(e).__name__}: {e}"[:500]
     try:
         if out.test_code is None and out.attempts < config.MAX_TEST_ATTEMPTS:
-            await submit_test.ainvoke({})  # judge whatever test file the agent left behind
+            await submit()  # judge whatever test file the agent left behind
     finally:
         if hasattr(backend, "aclose"):
             await backend.aclose()
