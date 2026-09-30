@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from receipts import auth, config, db, server, swebench
+from receipts import auth, checks, config, db, server, swebench
 from receipts.swebench import Instance
 
 ROWS = {
@@ -249,3 +249,11 @@ def test_owner_can_stop_a_running_check(api, monkeypatch):
     got = api.get(f"/api/runs/{run_id}").json()
     assert got["status"] == "error" and got["evidence"]["reason"] == "Stopped before it finished."
     assert api.post(f"/api/runs/{run_id}/cancel").status_code == 409  # already finished
+
+
+def test_live_events_carry_seconds_since_the_run_started():
+    """Stored receipts keep the live events, so this is where stage timings survive for later analysis."""
+    live = checks.LiveRun("r")
+    live.publish("claim", {})
+    live.publish("verdict", {})
+    assert all(isinstance(e["t"], float) for e in live.events) and live.events[0]["t"] <= live.events[1]["t"]

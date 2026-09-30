@@ -4,6 +4,7 @@ Both the SWE-bench demo (server.py) and GitHub pull requests (github.py) start c
 """
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -26,9 +27,10 @@ class LiveRun:
     task: asyncio.Task | None = None
     events: list[dict] = field(default_factory=list)
     listeners: set = field(default_factory=set)
+    started: float = field(default_factory=time.monotonic)
 
     def publish(self, type_: str, data: dict) -> None:
-        event = {"type": type_, "data": data}
+        event = {"type": type_, "t": round(time.monotonic() - self.started, 1), "data": data}
         self.events.append(event)
         for queue in self.listeners:
             queue.put_nowait(event)

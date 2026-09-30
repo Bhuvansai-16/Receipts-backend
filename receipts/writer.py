@@ -35,8 +35,8 @@ WRITE_TOOLS = {"write_file", "edit_file", "submit_test"}
 PROMPT = f"""You write ONE pytest file that reproduces a reported bug in the repository at /testbed.
 
 Work in this order and be quick. You get {EXPLORE_LIMIT} look-around tool calls (reading, searching, running
-commands) before your first submit_test, and {RETRY_ALLOWANCE} more after each one; past that only write_file,
-edit_file and submit_test work.
+commands) before your first submit_test, and {RETRY_ALLOWANCE} more after each one. Past that, any other tool call
+submits {TEST_PATH} as it is, so write it early.
 1. Find the code the issue is about: grep / read only the few relevant files.
 2. Write {TEST_PATH} with write_file.
 3. Call submit_test right away. It runs your file on a clean copy of the repo and returns the pytest output.
@@ -86,22 +86,23 @@ class SafeSandbox(ContreeSandbox):
         return sandbox.record(self.log, command, out)
 
 
-class TestAccepted(Exception):
-    """Ends the agent run once a test is accepted. Told to stop, the writer kept probing (seen: 77 s)."""
-
-    __test__ = False  # not a pytest test class
+class WriterDone(Exception):
+    """Ends the agent run once a test is accepted or no attempts are left. Told to stop, the writer kept
+    probing (seen: 77 s after acceptance)."""
 
 
 class ExplorationBudget(AgentMiddleware):
-    """Past the limit, look-around tools answer with an instruction instead of running.
+    """Past the limit, a look-around tool call submits the test file instead of running.
 
-    A warning alone didn't work: the writer kept probing until the sandbox budget ran out (seen: 40 commands
-    and no test file). Writing and submitting always run.
+    A warning didn't work (seen: 40 commands, no test file), and neither did refusing: the writer called
+    refused tools ~60 times and never submitted (772K tokens). Submitting for it turns each of those calls
+    into feedback it can act on, and ends the run once accepted. Writing and submitting always run.
     """
 
-    def __init__(self):
+    def __init__(self, submit):
         super().__init__()
         self.left = EXPLORE_LIMIT
+        self.submit = submit  # the agent's submit_test tool
 
     async def awrap_tool_call(self, request, handler):
         name = request.tool_call["name"]
@@ -109,8 +110,10 @@ class ExplorationBudget(AgentMiddleware):
             self.left = RETRY_ALLOWANCE
         elif name not in WRITE_TOOLS:
             if self.left <= 0:
-                return ToolMessage(f"[receipts] Look-around budget used up, so {name} did not run. Write "
-                                   f"{TEST_PATH} with write_file from what you know now, then call submit_test.",
+                self.left = RETRY_ALLOWANCE
+                result = await self.submit.ainvoke({})
+                return ToolMessage(f"[receipts] Look-around budget used up, so {name} did not run and "
+                                   f"{TEST_PATH} was submitted as it is:\n{result}",
                                    tool_call_id=request.tool_call["id"], name=name)
             self.left -= 1
         return await handler(request)
@@ -217,8 +220,8 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
     async def submit_test() -> str:
         """Submit /testbed/receipts_test.py. It is re-run on a clean copy of the repo and checked."""
         message = await submit()
-        if out.test_code is not None:
-            raise TestAccepted
+        if out.test_code is not None or out.attempts >= config.MAX_TEST_ATTEMPTS:
+            raise WriterDone
         return message
 
     async def check_submission() -> str:
@@ -255,12 +258,12 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         return "ACCEPTED. Stop now."
 
     agent = create_deep_agent(model=config.llm("writer"), tools=[docs_search, submit_test],
-                              system_prompt=PROMPT, backend=backend, middleware=[ExplorationBudget()])
+                              system_prompt=PROMPT, backend=backend, middleware=[ExplorationBudget(submit_test)])
     stopped = ""
     try:
         await agent.ainvoke({"messages": [{"role": "user", "content": f"Issue:\n\n{issue}"}]},
                             config={"recursion_limit": 150, "run_name": "blind_test_writer"})
-    except TestAccepted:
+    except WriterDone:
         pass
     except Exception as e:  # command budget / recursion limit / model error
         stopped = f"agent stopped: {type(e).__name__}: {e}"[:500]

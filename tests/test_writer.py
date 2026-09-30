@@ -215,15 +215,43 @@ def _through(mw, *names):
     return ran, asyncio.run(go())
 
 
-def test_exploration_budget_stops_look_around_tools_until_a_submission(monkeypatch):
+def test_exploration_budget_submits_the_test_instead_of_looking_around(monkeypatch):
+    # Seen: refused look-arounds were ignored ~60 times (772K tokens) and the test was never submitted.
     monkeypatch.setattr(writer, "EXPLORE_LIMIT", 2)
     monkeypatch.setattr(writer, "RETRY_ALLOWANCE", 1)
-    ran, replies = _through(writer.ExplorationBudget(), "grep", "read_file", "execute", "write_file",
+
+    class Submit:
+        calls = 0
+
+        async def ainvoke(self, args):
+            Submit.calls += 1
+            return "REJECTED: test_x: error with NameError"
+
+    ran, replies = _through(writer.ExplorationBudget(Submit()), "grep", "read_file", "execute", "write_file",
                             "submit_test", "execute", "read_file", "edit_file")
-    # the third look-around call is refused; writing and submitting always run; a submission buys one more
+    # past the limit a look-around call submits the file instead; writing always runs; a submission buys one more
     assert ran == ["grep", "read_file", "write_file", "submit_test", "execute", "edit_file"]
-    assert "write_file" in replies[2].content and "submit_test" in replies[2].content
+    assert Submit.calls == 2
+    assert "did not run" in replies[2].content and "REJECTED: test_x" in replies[2].content
     assert replies[2].tool_call_id == "2" and replies[6].tool_call_id == "6"
+
+
+def test_agent_run_ends_when_no_attempts_are_left(monkeypatch):
+    monkeypatch.setattr(writer.config, "MAX_TEST_ATTEMPTS", 1)
+    after = []
+
+    class Agent:
+        def __init__(self, tools):
+            self.submit = next(t for t in tools if t.name == "submit_test")
+
+        async def ainvoke(self, *a, **k):
+            await self.submit.ainvoke({})
+            after.append("kept going")
+
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, SimpleNamespace(faithful=[]),
+                           make_agent=lambda k: Agent(k["tools"]))
+    assert after == [] and out.test_code is None and out.attempts == 1
+    assert "sticks to the issue" in out.reason and "agent stopped" not in out.reason
 
 
 def test_writer_agent_runs_with_the_exploration_budget(monkeypatch):
