@@ -4,6 +4,7 @@ Integrity rule D2: the agent sees the issue and the unpatched repo only, never t
 Acceptance is decided by code (repro_check on a clean fork), not by the agent.
 """
 import ast
+import json
 from dataclasses import dataclass, field
 
 from contree_sdk.langchain.sandbox import ContreeSandbox
@@ -106,19 +107,31 @@ class ExplorationBudget(AgentMiddleware):
         super().__init__()
         self.left = EXPLORE_LIMIT
         self.submit = submit  # the agent's submit_test tool
+        self.seen: dict[str, str] = {}  # look-around call -> its output, until the next write changes things
 
     async def awrap_tool_call(self, request, handler):
         name = request.tool_call["name"]
+        reply = lambda content: ToolMessage(content, tool_call_id=request.tool_call["id"], name=name)  # noqa: E731
         if name == "submit_test":
             self.left = RETRY_ALLOWANCE
-        elif name not in WRITE_TOOLS:
+        elif name in WRITE_TOOLS:
+            self.seen.clear()
+        else:
             if self.left <= 0:
                 self.left = RETRY_ALLOWANCE
                 result = await self.submit.ainvoke({})
-                return ToolMessage(f"[receipts] Look-around budget used up, so {name} did not run and "
-                                   f"{TEST_PATH} was submitted as it is:\n{result}",
-                                   tool_call_id=request.tool_call["id"], name=name)
+                return reply(f"[receipts] Look-around budget used up, so {name} did not run and "
+                             f"{TEST_PATH} was submitted as it is:\n{result}")
             self.left -= 1
+            # Seen: the same command 15 times in a row, same output each time.
+            key = f"{name} {json.dumps(request.tool_call.get('args', {}), sort_keys=True, default=str)}"
+            if key in self.seen:
+                return reply(f"[receipts] You already ran exactly this; it gave:\n{self.seen[key][-1500:]}\n"
+                             f"Running it again won't change anything. Write or fix {TEST_PATH} and call submit_test.")
+            result = await handler(request)
+            if isinstance(result, ToolMessage):
+                self.seen[key] = str(result.content)
+            return result
         return await handler(request)
 
 

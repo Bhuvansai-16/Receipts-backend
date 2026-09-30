@@ -377,3 +377,27 @@ def test_submitting_before_the_file_exists_costs_no_attempt(monkeypatch):
     monkeypatch.setattr(writer, "stated_cases", lambda issue: asyncio.sleep(0, []))
     out = asyncio.run(writer.write_test("issue", object()))
     assert out.attempts == 0 and "not counted" in replies[0] and "write_file" in replies[0]
+
+
+def test_a_repeated_identical_call_returns_the_earlier_output_without_running(monkeypatch):
+    # Seen in #15: the writer ran the same command 15 times in a row and got the same output each time.
+    from langchain.agents.middleware.types import ToolCallRequest
+    from langchain_core.messages import ToolMessage
+
+    ran = []
+
+    async def handler(req):
+        ran.append(req.tool_call["name"])
+        return ToolMessage(f"output {len(ran)}", tool_call_id=req.tool_call["id"])
+
+    mw = writer.ExplorationBudget(None)
+    calls = [("execute", {"command": "python -c 'print(1)'"}), ("execute", {"command": "python -c 'print(1)'"}),
+             ("write_file", {"file_path": "/testbed/receipts_test.py"}), ("execute", {"command": "python -c 'print(1)'"})]
+
+    async def go():
+        return [await mw.awrap_tool_call(ToolCallRequest({"name": n, "args": a, "id": str(i)}, None, {}, None), handler)
+                for i, (n, a) in enumerate(calls)]
+
+    replies = asyncio.run(go())
+    assert ran == ["execute", "write_file", "execute"]  # after a write the same command may show something new
+    assert "already ran" in replies[1].content and "output 1" in replies[1].content
