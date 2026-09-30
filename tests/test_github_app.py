@@ -79,18 +79,20 @@ def test_check_run_conclusions():
 
 def test_check_runs_are_created_and_completed(fake_github):
     check_id = run(github_app.start_check(7, 42, "octo/hello", "abc", "http://localhost:5173/runs/r1"))
-    run(github_app.finish_check(7, 42, "octo/hello", check_id, "REFUTED", "still fails", "http://localhost:5173/runs/r1"))
+    run(github_app.finish_check(7, 42, "octo/hello", check_id, {"verdict": "REFUTED", "reason": "still fails"},
+                                "http://localhost:5173/runs/r1"))
     create, complete = [c for c in fake_github.calls if "/check-runs" in c.url.path]
     assert check_id == 555 and create.method == "POST" and json.loads(create.content)["head_sha"] == "abc"
     body = json.loads(complete.content)
     assert complete.method == "PATCH" and complete.url.path.endswith("/check-runs/555")
     assert body["conclusion"] == "failure" and body["status"] == "completed"
+    assert body["output"]["title"].startswith("Refuted") and "still fails" in body["output"]["summary"]
 
 
 def test_check_run_errors_never_raise(fake_github):
     fake_github.checks = lambda r: httpx.Response(403, json={"message": "Resource not accessible"})
     assert run(github_app.start_check(7, 42, "octo/hello", "abc", "http://x/runs/r1")) is None
-    run(github_app.finish_check(7, 42, "octo/hello", 555, "PROVEN", "ok", "http://x/runs/r1"))  # no exception
+    run(github_app.finish_check(7, 42, "octo/hello", 555, {"verdict": "PROVEN", "reason": "ok"}, "http://x/runs/r1"))
 
 
 def test_check_run_is_created_without_a_link_github_rejects(fake_github):
@@ -109,3 +111,44 @@ def test_private_key_path_is_relative_to_the_backend_folder(monkeypatch, tmp_pat
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_PATH", "github-app.pem")
     monkeypatch.setattr(config, "ROOT", tmp_path)
     assert config.github_private_key() == "PEM"
+
+
+def _ev(verdict, base_fail=3, pr_fail=0, msg="Expected z**4, got -z**4", code="def test_t():\n    assert 1\n" * 100):
+    fail = {"tests": 1, "not_passed": {"t.py::t": {"outcome": "failed", "exc": "AssertionError", "msg": msg}},
+            "output_tail": ""}
+    ok = {"tests": 1, "not_passed": {}, "output_tail": ""}
+    return {"verdict": verdict, "reason": "r", "claim": {"kind": "fix", "claim": "refine misses Abs(z)**4"},
+            "writer": {"test_code": code},
+            "forks": {"base_with_test": [fail] * base_fail + [ok] * (3 - base_fail),
+                      "pr_with_test": [fail] * pr_fail + [ok] * (3 - pr_fail)}}
+
+
+def test_check_output_explains_a_proven_run():
+    out = github_app.check_output(_ev("PROVEN"), "https://r/1")
+    assert out["title"].startswith("Proven")
+    assert "fails on the original code in 3 of 3 runs" in out["summary"]
+    assert "passes with this pull request in 3 of 3 runs" in out["summary"] and "https://r/1" in out["summary"]
+    assert out["text"].startswith("### Blind test") and out["text"].count("\n") < 70  # first 60 lines only
+
+
+def test_check_output_names_the_case_still_failing():
+    out = github_app.check_output(_ev("UNPROVEN", pr_fail=3), "u")
+    assert "Still failing with the change: Expected z**4, got -z**4" in out["summary"]
+
+
+def test_check_output_stays_within_githubs_limits():
+    ev = _ev("UNPROVEN", pr_fail=3, msg="x" * 100_000)
+    ev["reason"] = "y" * 100_000
+    out = github_app.check_output(ev, "u")
+    assert len(out["summary"]) <= 65_535 and len(out["text"]) <= 65_535
+
+
+def test_a_test_with_backticks_cannot_break_out_of_its_code_block():
+    out = github_app.check_output(_ev("PROVEN", code='DOC = """```\nnot code```"""\ndef test_t(): pass\n'), "u")
+    fence = out["text"].splitlines()[1]
+    assert fence.startswith("````") and out["text"].rstrip().endswith(fence[:4])
+
+
+def test_check_output_without_forks_still_says_what_happened():
+    out = github_app.check_output({"verdict": "NO_CHECKABLE_CLAIM", "reason": "classified as 'none'"}, "u")
+    assert out["title"].startswith("No checkable claim") and out["text"] == "" and "classified" in out["summary"]

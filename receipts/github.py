@@ -168,8 +168,9 @@ async def start_pr_check(runs, user_id: str, repo: dict, pr: dict) -> str:
         return target, diff
 
     async def on_finish(status, evidence):
-        await github_app.finish_check(inst, repo_id, full, check.get("id"), evidence.get("verdict") or "UNPROVEN",
-                                      evidence.get("reason") or "the check failed to run", details)
+        await github_app.finish_check(inst, repo_id, full, check.get("id"),
+                                      {**evidence, "reason": evidence.get("reason") or "the check failed to run"},
+                                      details)
 
     source = {"repo": full, "pr_number": number, "head_sha": head_sha, "url": pr["html_url"],
               "title": pr.get("title"), "linked_issue": targets.linked_issue(pr.get("body"))}

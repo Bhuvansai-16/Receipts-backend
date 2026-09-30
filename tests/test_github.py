@@ -160,6 +160,7 @@ def test_check_button_starts_a_run_and_a_check_run(client, gh):
     create, complete = [c for c in gh.calls if "/check-runs" in c.url.path]
     assert json.loads(create.content)["details_url"] == f"http://localhost:5173/runs/{run_id}"
     assert json.loads(complete.content)["conclusion"] == "success"
+    assert json.loads(complete.content)["output"]["title"].startswith("Proven")
     assert client.get("/api/github/repos/octo/hello/pulls").json()["pulls"][0]["latest"]["id"] == run_id
 
 

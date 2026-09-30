@@ -5,6 +5,7 @@ Docs: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a
 import hashlib
 import hmac
 import logging
+import re
 import time
 from datetime import datetime
 
@@ -87,14 +88,59 @@ async def start_check(installation_id, repo_id, full_name, head_sha, details_url
         return None
 
 
-async def finish_check(installation_id, repo_id, full_name, check_run_id, verdict, reason, details_url) -> None:
+HEADLINE = {
+    "PROVEN": "Proven: the pull request does what it claims",
+    "REFUTED": "Refuted: the test still fails the same way with this change",
+    "REGRESSION": "Regression: the fix breaks tests that passed before",
+    "UNPROVEN": "Unproven: not enough evidence either way (this says nothing against the PR)",
+    "NO_CHECKABLE_CLAIM": "No checkable claim: the PR doesn't claim to fix a bug",
+}
+LIMIT = 60_000  # GitHub allows 65,535 characters per output field
+
+
+def _fails(runs) -> int:
+    return sum(1 for r in runs if r.get("not_passed")) if isinstance(runs, list) else 0
+
+
+def _fenced(code: str) -> str:
+    """A code block whose fence is longer than any backtick run in the code, so the code can't close it."""
+    longest = max((len(run) for run in re.findall(r"`+", code)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}python\n{code}\n{fence}"
+
+
+def check_output(ev: dict, details_url: str) -> dict:
+    """The check run's title, summary and text: what the verdict means and the evidence behind it."""
+    verdict = ev.get("verdict") or "UNPROVEN"
+    headline = HEADLINE.get(verdict, verdict)
+    lines = [f"**{headline}**", ""]
+    if claim := (ev.get("claim") or {}).get("claim"):
+        lines.append(f"Claim: {claim[:1000]}")
+    forks = ev.get("forks") or {}
+    base, pr = forks.get("base_with_test"), forks.get("pr_with_test")
+    if isinstance(base, list) and base:
+        lines.append(f"- Blind test fails on the original code in {_fails(base)} of {len(base)} runs")
+    if isinstance(pr, list) and pr:
+        lines.append(f"- Blind test passes with this pull request in {len(pr) - _fails(pr)} of {len(pr)} runs")
+        still = next((f.get("msg") or "" for r in pr for f in r.get("not_passed", {}).values()), None)
+        if still:
+            lines.append(f"- Still failing with the change: {still.splitlines()[0][:500]}")
+    elif isinstance(pr, str):
+        lines.append("- The pull request's patch did not apply at its base, so it was never run")
+    lines += ["", f"Reason: {(ev.get('reason') or '')[:2000]}", "", f"Full receipt: {details_url}"]
+    code = "\n".join(((ev.get("writer") or {}).get("test_code") or "").splitlines()[:60])
+    text = f"### Blind test (written from the issue alone)\n{_fenced(code[:LIMIT])}" if code else ""
+    return {"title": headline.split(":")[0], "summary": "\n".join(lines)[:LIMIT], "text": text[:LIMIT]}
+
+
+async def finish_check(installation_id, repo_id, full_name, check_run_id, evidence: dict, details_url) -> None:
     if not check_run_id:
         return
     try:
         token = await installation_token(installation_id, repo_id, {"checks": "write"})
         await _check_run_call(token, "PATCH", f"/repos/{full_name}/check-runs/{check_run_id}", {
-            "status": "completed", "conclusion": CONCLUSION.get(verdict, "neutral"), "details_url": details_url,
-            "output": {"title": f"Receipts: {verdict}", "summary": f"{reason}\n\nFull receipt: {details_url}"}})
+            "status": "completed", "conclusion": CONCLUSION.get(evidence.get("verdict") or "UNPROVEN", "neutral"),
+            "details_url": details_url, "output": check_output(evidence, details_url)})
     except GitHubError as e:
         log.warning("check run %s not completed: %s", check_run_id, e)
 
