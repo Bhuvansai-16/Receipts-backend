@@ -184,6 +184,34 @@ async def scope_check(issue: str, test_code: str, failing: list[str], cases: lis
     return await config.llm("scope").with_structured_output(Scope, method="function_calling").ainvoke(prompt)
 
 
+class AfterFix(BaseModel):
+    test: str
+    after_fix: str = Field(description="What the checked expression evaluates to once the code is fixed as the report "
+                                       "wants, and what it is compared with")
+    passes_after_fix: bool
+
+
+class AfterFixReview(BaseModel):
+    tests: list[AfterFix]
+
+
+@traceable(name="after_fix_check")
+async def after_fix_check(issue: str, test_code: str, tests: list[str]) -> list[AfterFix]:
+    """Would each test pass once the code is fixed as the issue wants? A test that fails on any code (sympy #13:
+    a float finite difference against an exact value) turns a real fix into "mixed". The judge model catches
+    that; the scope model didn't, even told to look for it."""
+    prompt = (
+        "A bug report and pytest tests written from it are below. These tests fail on the current code: "
+        f"{', '.join(tests)}. For each of them, imagine the code fixed exactly as the report wants, work out what "
+        "the checked expression would then evaluate to, and say whether the assertion would pass. A test that "
+        "compares a floating-point approximation with an exact value, or checks a value the fix doesn't change, "
+        "would still fail.\n\n"
+        f"Bug report:\n{issue[:8000]}\n\nTests:\n```python\n{test_code}\n```"
+    )
+    review = await config.llm("judge").with_structured_output(AfterFixReview, method="function_calling").ainvoke(prompt)
+    return review.tests
+
+
 def _test_name(nodeid: str) -> str:
     return nodeid.split("::")[-1].split("[")[0]
 
@@ -306,6 +334,13 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         if scope.missing:  # a partial test lets a half-right PR read PROVEN
             out.reason = f"the tests leave out cases the issue states: {'; '.join(scope.missing)}"[:800]
             return f"REJECTED: {out.reason}\nAdd a test for each, then submit again."
+        names = {_test_name(n) for n in faithful}
+        broken = [t for t in await after_fix_check(issue, keep_tests(code, faithful), sorted(names))
+                  if not t.passes_after_fix and t.test.split("(")[0].strip() in names]
+        if broken:
+            out.reason = "; ".join(f"{t.test.split('(')[0].strip()} would still fail after a correct fix: {t.after_fix}"
+                                   for t in broken)[:800]
+            return f"REJECTED: {out.reason}\nFix or remove those tests, then submit again."
         trimmed = keep_tests(code, faithful)
         if trimmed != code:  # re-verify what remains reproduces on its own
             run = await run_pytest(base_image, TEST_ARGS, {TEST_PATH: trimmed.encode()})

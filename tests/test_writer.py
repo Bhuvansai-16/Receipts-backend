@@ -88,8 +88,12 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
     async def stated_cases(issue):
         return []
 
+    async def after_fix_check(issue, test_code, tests):
+        return []
+
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
-                     ("scope_check", scope_check), ("stated_cases", stated_cases)]:
+                     ("scope_check", scope_check), ("stated_cases", stated_cases),
+                     ("after_fix_check", after_fix_check)]:
         monkeypatch.setattr(writer, name, fn)
     out = asyncio.run(writer.write_test("issue", object()))
     assert out.test_code == "def test_bug(): assert 1 == 2" and out.attempts == 1 and Backend.closed
@@ -133,11 +137,16 @@ def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=No
     async def stated_cases(issue):
         return getattr(scope, "cases", [])
 
+    async def after_fix_check(issue, test_code, tests):
+        return [writer.AfterFix(test=t, after_fix="0.28867515045*I compared with 0.288675134594813*I",
+                                passes_after_fix=False) for t in getattr(scope, "broken", [])]
+
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: make_agent(k) if make_agent else Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
-                     ("scope_check", scope_check), ("stated_cases", stated_cases)]:
+                     ("scope_check", scope_check), ("stated_cases", stated_cases),
+                     ("after_fix_check", after_fix_check)]:
         monkeypatch.setattr(writer, name, fn)
     return asyncio.run(writer.write_test("issue", object(), emit))
 
@@ -404,3 +413,11 @@ def test_a_repeated_identical_call_returns_the_earlier_output_without_running(mo
     replies = asyncio.run(go())
     assert ran == ["execute", "write_file", "execute"]  # after a write the same command may show something new
     assert "already ran" in replies[1].content and "output 1" in replies[1].content
+
+
+def test_rejected_when_a_test_would_still_fail_after_a_correct_fix(monkeypatch):
+    # Seen in sympy #13: a float finite difference compared with an exact value fails on any code, so a PR
+    # that fixed the bug read "mixed". The judge model spots it before acceptance (the scope model didn't).
+    scope = SimpleNamespace(faithful=["test_bug", "test_extra"], broken=["test_extra()"])
+    out = _fake_writer_run(monkeypatch, CODE, RESULTS, scope)
+    assert out.test_code is None and "test_extra would still fail after a correct fix" in out.reason
