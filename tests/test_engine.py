@@ -122,3 +122,41 @@ def test_new_run_id_is_safe_and_unique(tmp_path, monkeypatch):
     first = engine.new_run_id("x__y-1", "../my fix!")
     assert engine.safe_run_id(first) and "/" not in first and " " not in first
     assert engine.new_run_id("x__y-1", "../my fix!", taken={first}) != first  # same second, no clash
+
+
+def test_environment_is_built_while_the_claim_is_classified(monkeypatch):
+    started = asyncio.Event()
+
+    async def base_image(iid):
+        started.set()
+        return Img("base")
+
+    async def classify(issue, patch):
+        await asyncio.wait_for(started.wait(), 1)  # a build that waits for the claim would time out here
+        return engine.Claim(kind="fix", claim="c")
+
+    monkeypatch.setattr(swebench, "base_image", base_image)
+    monkeypatch.setattr(engine, "classify", classify)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "PROVEN", ev["reason"]
+    assert [e["type"] for e in ev["events"]][:2] == ["claim", "env_ready"]
+
+
+def test_no_checkable_claim_stops_the_environment_build(monkeypatch):
+    cancelled = []
+
+    async def base_image(iid):
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    async def classify(issue, patch):
+        await asyncio.sleep(0.01)
+        return engine.Claim(kind="none", claim="docs")
+
+    monkeypatch.setattr(swebench, "base_image", base_image)
+    monkeypatch.setattr(engine, "classify", classify)
+    ev = asyncio.run(asyncio.wait_for(engine.check(INST, PATCH), 5))
+    assert ev["verdict"] == "NO_CHECKABLE_CLAIM" and cancelled == [True]

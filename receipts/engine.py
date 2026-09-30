@@ -147,13 +147,21 @@ async def check(inst: Instance, patch: str | None, emit=None) -> dict:
 
 
 async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[Verdict, str]:
-    claim = await classify(inst.problem_statement, patch or "")
+    # The environment doesn't depend on the claim, so it builds while the claim is classified (~10 s saved).
+    # ponytail: a PR with nothing to check pays for a few seconds of an abandoned build.
+    env = asyncio.ensure_future(inst.base_image())
+    try:
+        claim = await classify(inst.problem_statement, patch or "")
+    except BaseException:
+        env.cancel()
+        raise
     ev["claim"] = claim.model_dump()
     say("claim", ev["claim"])
     if claim.kind != "fix":
+        env.cancel()
         return Verdict.NO_CHECKABLE_CLAIM, f"classified as '{claim.kind}': nothing to check"
 
-    base = await inst.base_image()
+    base = await env
     say("env_ready")
     w = await write_test(inst.problem_statement, base, say)
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
