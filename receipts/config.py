@@ -47,7 +47,10 @@ def github_private_key() -> str:
     if key := os.environ.get("GITHUB_APP_PRIVATE_KEY"):
         return key.replace("\\n", "\n")
     path = os.environ.get("GITHUB_APP_PRIVATE_KEY_PATH")
-    return Path(path).read_text(encoding="utf-8") if path else ""
+    if not path:
+        return ""
+    # relative to the backend folder, not to wherever the server was started from
+    return (Path(path) if Path(path).is_absolute() else ROOT / path).read_text(encoding="utf-8")
 
 
 def llm(role: str):

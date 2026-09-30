@@ -101,3 +101,11 @@ def test_check_run_is_created_without_a_link_github_rejects(fake_github):
 
     fake_github.checks = checks
     assert run(github_app.start_check(7, 42, "octo/hello", "abc", "http://localhost:5173/runs/r1")) == 777
+
+
+def test_private_key_path_is_relative_to_the_backend_folder(monkeypatch, tmp_path):
+    (tmp_path / "github-app.pem").write_text("PEM", encoding="utf-8")
+    monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_PATH", "github-app.pem")
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    assert config.github_private_key() == "PEM"
