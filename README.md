@@ -46,6 +46,34 @@ and rewrites its cookies to `HttpOnly; Secure; SameSite=Lax`. Other endpoints: `
 runs, newest first, paged), `/api/runs/{id}` and `/api/runs/{id}/events` (public receipts), `/api/github/repos` (the
 signed-in user's public GitHub repositories, read with their GitHub sign-in token on the server), `/api/health`.
 
+## GitHub App (real pull requests)
+
+One GitHub App does three jobs: it is Neon's "Sign in with GitHub" provider, users install it on the
+repositories they want checked, and it posts each verdict as a `Receipts` check on the pull request.
+
+1. GitHub > Settings > Developer settings > GitHub Apps > New GitHub App.
+   - Callback URL: `{NEON_AUTH_URL}/callback/github`. Leave "Request user authorization during installation" off.
+   - Setup URL: `{API_URL}/api/github/setup`, with "Redirect on update" on.
+   - Webhook: active, URL `{API_URL}/api/github/webhook` (locally, a smee.io channel, see below), and a secret.
+   - Repository permissions: Metadata read, Contents read, Pull requests read, Issues read, Checks read and write.
+   - Subscribe to events: Pull request.
+2. Generate a private key (a `.pem` file) and note the App ID and the app's URL name (`github.com/apps/<slug>`).
+3. Neon Console > Auth > OAuth providers > GitHub: replace the client ID and secret with this app's.
+   Existing GitHub users sign in once more afterwards.
+4. Add to `.env`: `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY_PATH` (or the PEM itself in
+   `GITHUB_APP_PRIVATE_KEY` with newlines written as `\n`), `GITHUB_WEBHOOK_SECRET`, and `API_URL`.
+5. Run `python -m receipts migrate` for the GitHub tables.
+
+Local webhooks: GitHub can't reach `localhost`, so forward a smee.io channel to the API:
+
+```bash
+npx smee-client --url https://smee.io/<your-channel> --target http://localhost:8000/api/github/webhook
+```
+
+Checks on real repositories need `SANDBOX_PROVIDER=contree` (Nebius sandboxes) and Python projects tested with
+pytest. The API only trusts installations that GitHub lists for the signed-in user, verifies every webhook
+signature, and gives each GitHub call a token limited to one repository; no token enters a sandbox.
+
 ## Sandbox provider
 
 `SANDBOX_PROVIDER=contree` (default) runs on Nebius Token Factory Sandboxes, which the submission uses.
