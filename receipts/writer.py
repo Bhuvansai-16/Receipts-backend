@@ -164,13 +164,16 @@ class Scope(BaseModel):
 
 
 @traceable(name="scope_check")
-async def scope_check(issue: str, test_code: str, cases: list[str]) -> Scope:
-    """Blind review (issue + tests only): which tests assert just what the issue asks, and which of the
-    issue's cases does no test cover?"""
+async def scope_check(issue: str, test_code: str, failing: list[str], cases: list[str]) -> Scope:
+    """Blind review (issue + tests only): which failing tests assert just what the issue asks, and which of the
+    issue's cases does no test cover? It sees passing tests too: they cover cases the issue says already work
+    (seen: pruned before review, such a case was reported missing on every attempt)."""
     listed = "".join(f"\n- {c}" for c in cases)
+    names = ", ".join(_test_name(n) for n in failing)
     prompt = (
-        "The pytest tests below were written from the bug report below, and each fails on the current code. "
-        "List in faithful_tests the names of the tests that assert only behaviour the report says is wrong, with "
+        f"The pytest tests below were written from the bug report below. These fail on the current code: {names}; "
+        "any others pass on it. "
+        "List in faithful_tests the failing tests that assert only behaviour the report says is wrong, with "
         "expectations the report states or clearly implies, and that have no mistakes of their own (for example a "
         "name or docstring claiming something the test doesn't do). Leave out any test that adds other cases, "
         "methods, inputs or expectations the report doesn't ask for, and say in reason what you left out and why. "
@@ -295,8 +298,7 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         # Keep only tests that reproduce the bug AND stick to the issue; prune the rest ourselves instead of
         # sending the agent round again (it tends to run out of budget before resubmitting).
         failing = [n for n, r in run.results.items() if r.outcome != "passed"]
-        reproducing = keep_tests(code, failing)
-        scope = await scope_check(issue, reproducing, cases)
+        scope = await scope_check(issue, code, failing, cases)
         faithful = [n for n in failing if _test_name(n) in set(scope.faithful_tests)]
         if not faithful:
             out.reason = f"no test sticks to the issue: {scope.reason}"

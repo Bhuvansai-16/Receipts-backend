@@ -82,7 +82,7 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
 
-    async def scope_check(issue, test_code, cases):
+    async def scope_check(issue, test_code, failing, cases):
         return writer.Scope(faithful_tests=["test_bug"], reason="ok")
 
     async def stated_cases(issue):
@@ -125,8 +125,8 @@ def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=No
     async def run_pytest(image, args, files):
         return PytestRun({k: TestResult(*v) for k, v in results.items()})
 
-    async def scope_check(issue, test_code, cases):
-        scope.seen, scope.cases_seen = test_code, cases
+    async def scope_check(issue, test_code, failing, cases):
+        scope.seen, scope.failing_seen, scope.cases_seen = test_code, failing, cases
         return writer.Scope(faithful_tests=scope.faithful, reason="test_extra adds POST expectations",
                             missing=getattr(scope, "missing", []))
 
@@ -154,7 +154,10 @@ def test_scope_check_keeps_only_faithful_failing_tests(monkeypatch):
     out = _fake_writer_run(monkeypatch, CODE, RESULTS, scope)
     assert out.test_code is not None and "def test_bug" in out.test_code
     assert "test_extra" not in out.test_code and "test_guard" not in out.test_code
-    assert "test_guard" not in scope.seen  # the reviewer only sees tests that reproduce the bug
+    # The reviewer sees the whole file, told which tests fail: a passing test still covers a case the issue
+    # says already works (seen in #26: pruned before review, then reported missing, forever).
+    assert "test_guard" in scope.seen
+    assert scope.failing_seen == ["receipts_test.py::test_bug", "receipts_test.py::test_extra"]
 
 
 def test_rejected_when_no_test_sticks_to_the_issue(monkeypatch):
