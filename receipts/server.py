@@ -168,6 +168,10 @@ async def get_run(run_id: str, runs=Depends(runs_store)) -> Response:
         if row["status"] == "error" and row["reason"]:
             events.append({"type": "error", "data": {"message": row["reason"]}})
         evidence = {"instance_id": row["instance_id"], "started_at": row["started_at"], "events": events}
+        if row.get("repo"):  # a pull request check: name it while it runs, as the finished receipt will
+            evidence.update(repo=row["repo"], source={
+                "repo": row["repo"], "pr_number": row["pr_number"], "head_sha": row["head_sha"],
+                "url": f"https://github.com/{row['repo']}/pull/{row['pr_number']}"})
     finished = row["status"] in ("done", "error")
     return Response(_dumps({"status": row["status"], "evidence": {**evidence, "pr": evidence.get("pr") or row["pr"]}}),
                     media_type="application/json",

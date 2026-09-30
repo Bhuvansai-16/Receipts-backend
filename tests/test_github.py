@@ -192,3 +192,12 @@ def test_uninstall_removes_the_installation(client):
 def test_me_reports_usage(client):
     assert signed_in(client).get("/api/me").json()["usage"] == {"active": 0, "today": 0, "max_active": 2,
                                                                   "per_day": 20}
+
+
+def test_a_running_pr_check_already_names_its_pull_request(client):
+    import asyncio
+    source = {"repo": "octo/hello", "pr_number": 12, "head_sha": "head1"}
+    asyncio.run(client.store.create("r-live", "u1", "octo/hello#12", "github", source=source))
+    ev = client.get("/api/runs/r-live").json()["evidence"]
+    assert ev["repo"] == "octo/hello"
+    assert ev["source"] == {**source, "url": "https://github.com/octo/hello/pull/12"}

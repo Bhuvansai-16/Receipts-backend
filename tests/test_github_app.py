@@ -91,3 +91,13 @@ def test_check_run_errors_never_raise(fake_github):
     fake_github.checks = lambda r: httpx.Response(403, json={"message": "Resource not accessible"})
     assert run(github_app.start_check(7, 42, "octo/hello", "abc", "http://x/runs/r1")) is None
     run(github_app.finish_check(7, 42, "octo/hello", 555, "PROVEN", "ok", "http://x/runs/r1"))  # no exception
+
+
+def test_check_run_is_created_without_a_link_github_rejects(fake_github):
+    def checks(request):
+        body = json.loads(request.content)
+        return httpx.Response(422, json={"message": "Invalid details_url"}) if "details_url" in body \
+            else httpx.Response(201, json={"id": 777})
+
+    fake_github.checks = checks
+    assert run(github_app.start_check(7, 42, "octo/hello", "abc", "http://localhost:5173/runs/r1")) == 777

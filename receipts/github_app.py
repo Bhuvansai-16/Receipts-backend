@@ -79,7 +79,7 @@ async def installation_token(installation_id: int, repo_id: int | None = None,
 async def start_check(installation_id, repo_id, full_name, head_sha, details_url) -> int | None:
     try:
         token = await installation_token(installation_id, repo_id, {"checks": "write"})
-        r = await api(token, "POST", f"/repos/{full_name}/check-runs", json={
+        r = await _check_run_call(token, "POST", f"/repos/{full_name}/check-runs", {
             "name": "Receipts", "head_sha": head_sha, "status": "in_progress", "details_url": details_url})
         return r.json()["id"]
     except GitHubError as e:  # a missing check run must never stop the check itself
@@ -92,8 +92,18 @@ async def finish_check(installation_id, repo_id, full_name, check_run_id, verdic
         return
     try:
         token = await installation_token(installation_id, repo_id, {"checks": "write"})
-        await api(token, "PATCH", f"/repos/{full_name}/check-runs/{check_run_id}", json={
+        await _check_run_call(token, "PATCH", f"/repos/{full_name}/check-runs/{check_run_id}", {
             "status": "completed", "conclusion": CONCLUSION.get(verdict, "neutral"), "details_url": details_url,
             "output": {"title": f"Receipts: {verdict}", "summary": f"{reason}\n\nFull receipt: {details_url}"}})
     except GitHubError as e:
         log.warning("check run %s not completed: %s", check_run_id, e)
+
+
+async def _check_run_call(token: str, method: str, path: str, body: dict) -> httpx.Response:
+    try:
+        return await api(token, method, path, json=body)
+    except GitHubError as e:
+        if e.status != 422 or "details_url" not in body:
+            raise
+        # GitHub can refuse a link it won't show (e.g. http://localhost in development); the summary still has it
+        return await api(token, method, path, json={k: v for k, v in body.items() if k != "details_url"})
