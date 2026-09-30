@@ -145,6 +145,9 @@ class MemoryRuns:
         mine = [r for r in self.rows.values() if r["user_id"] == user_id]
         return sum(r["status"] in ACTIVE for r in mine), sum(r["started_at"] >= since for r in mine)
 
+    async def global_recent(self, since):
+        return sum(r["started_at"] >= since for r in self.rows.values())
+
     async def fail_unfinished(self):
         stale = [r for r in self.rows.values() if r["status"] in ACTIVE]
         for r in stale:
@@ -268,6 +271,9 @@ class PgRuns:
                               "count(*) FILTER (WHERE started_at >= %s) AS recent FROM runs WHERE user_id = %s",
                               (since, user_id))
         return row["active"], row["recent"]
+
+    async def global_recent(self, since):
+        return (await self._one("SELECT count(*) AS n FROM runs WHERE started_at >= %s", (since,)))["n"]
 
     async def fail_unfinished(self):
         # ponytail: assumes one API instance; with several, only fail runs this instance owned

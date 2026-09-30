@@ -47,11 +47,14 @@ async def usage(runs, user_id) -> tuple[int, int]:
 
 async def enforce_limits(runs, user_id) -> None:
     # ponytail: check-then-insert; two simultaneous starts can both pass. Fine for a cost guard.
-    active, recent = await usage(runs, user_id)
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    active, recent = await runs.usage(user_id, since)
     if active >= config.MAX_ACTIVE_RUNS:
         raise HTTPException(429, f"You already have {active} checks running. Start another when one finishes.")
     if recent >= config.RUNS_PER_DAY:
         raise HTTPException(429, f"Daily limit reached ({config.RUNS_PER_DAY} checks in 24 hours). Try again later.")
+    if await runs.global_recent(since) >= config.GLOBAL_RUNS_PER_DAY:
+        raise HTTPException(429, "Receipts has reached today's check limit for everyone. Try again tomorrow.")
 
 
 async def launch(runs, user_id, run_id, instance_id, pr_kind, prepare, *, source=None, on_start=None,

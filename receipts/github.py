@@ -225,6 +225,10 @@ async def _auto_check(runs, payload: dict) -> None:
     repo, pr = payload["repository"], payload["pull_request"]
     if repo["id"] not in await runs.auto_checks([repo["id"]]):
         return
+    login = (repo.get("owner") or {}).get("login", "").lower()
+    if config.ALLOWED_GITHUB_ACCOUNTS and login not in config.ALLOWED_GITHUB_ACCOUNTS:
+        log.info("auto-check skipped for %s: account not allowed", repo["full_name"])
+        return
     owner = await runs.installation_owner(payload["installation"]["id"])
     head = pr["head"]["sha"]
     if not owner or await runs.has_run_for_head(repo["full_name"], pr["number"], head):

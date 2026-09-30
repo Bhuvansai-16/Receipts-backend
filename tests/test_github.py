@@ -227,3 +227,29 @@ def test_repo_lists_are_read_from_github_once_a_minute(client, gh):
     webhook(client, {"action": "added", "installation": {"id": 7}}, event="installation_repositories")
     client.get("/api/github/repos")
     assert lists() == 3
+
+
+def test_global_daily_cap_refuses_new_checks(client, monkeypatch):
+    signed_in(client).post("/api/github/installations/sync")
+    monkeypatch.setattr(config, "GLOBAL_RUNS_PER_DAY", 0)
+    r = client.post("/api/github/repos/octo/hello/pulls/12/check")
+    assert r.status_code == 429 and "everyone" in r.json()["detail"]
+
+
+def test_global_cap_skips_webhook_auto_checks_quietly(client, monkeypatch):
+    signed_in(client).post("/api/github/installations/sync")
+    client.put("/api/github/repos/42/auto-check", json={"enabled": True})
+    monkeypatch.setattr(config, "GLOBAL_RUNS_PER_DAY", 0)
+    assert webhook(client, PR_EVENT).status_code == 202 and client.store.rows == {}
+
+
+def test_auto_checks_only_for_allowed_accounts(client, monkeypatch):
+    signed_in(client).post("/api/github/installations/sync")
+    client.put("/api/github/repos/42/auto-check", json={"enabled": True})
+    event = {**PR_EVENT, "repository": {**PR_EVENT["repository"], "owner": {"login": "Octo"}}}
+    monkeypatch.setattr(config, "ALLOWED_GITHUB_ACCOUNTS", {"someone-else"})
+    webhook(client, event, delivery="a1")
+    assert client.store.rows == {}
+    monkeypatch.setattr(config, "ALLOWED_GITHUB_ACCOUNTS", {"octo"})
+    webhook(client, event, delivery="a2")
+    assert len(client.store.rows) == 1

@@ -204,3 +204,12 @@ def test_auto_check_switch_and_installation_removal(store, run):
         await store.delete_installation(7)
         return on, off, await store.auto_checks([42]), await store.user_installations("u1")
     assert run(go()) == ({42}, set(), set(), [])
+
+
+def test_global_recent_counts_every_user_in_the_window(store, run):
+    async def go():
+        await store.create("a", "u1", "x__y-1", "gold", T0)
+        await store.create("b", "u2", "x__y-1", "gold", T0)
+        await store.create("old", "u3", "x__y-1", "gold", T0 - timedelta(days=2))
+        return await store.global_recent(T0 - timedelta(days=1))
+    assert run(go()) == 2

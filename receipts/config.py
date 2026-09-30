@@ -34,6 +34,10 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/
 COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "") or None  # e.g. ".example.com" for app. + api. subdomains
 MAX_ACTIVE_RUNS = int(os.environ.get("MAX_ACTIVE_RUNS", "2"))
 RUNS_PER_DAY = int(os.environ.get("RUNS_PER_DAY", "20"))
+GLOBAL_RUNS_PER_DAY = int(os.environ.get("GLOBAL_RUNS_PER_DAY", "60"))  # every user together: caps spend
+# When set, webhook auto-checks run only on these GitHub accounts (the app is public; manual checks still work)
+ALLOWED_GITHUB_ACCOUNTS = {a.strip().lower() for a in os.environ.get("ALLOWED_GITHUB_ACCOUNTS", "").split(",")
+                           if a.strip()}
 
 # GitHub App (github.com > Settings > Developer settings > GitHub Apps); see README "GitHub App"
 API_URL = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")  # setup redirect + check links
