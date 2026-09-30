@@ -13,7 +13,7 @@ from langchain_core.callbacks import get_usage_metadata_callback
 from langsmith import traceable
 from pydantic import BaseModel
 
-from . import config
+from . import config, research
 from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
 from .swebench import Instance
 from .verdict import PytestRun, Verdict, fix_verdict, restrict, suite_candidates
@@ -161,10 +161,14 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
         env.cancel()
         return Verdict.NO_CHECKABLE_CLAIM, f"classified as '{claim.kind}': nothing to check"
 
+    brief_task = asyncio.ensure_future(research.research(inst.repo, inst.problem_statement))
     base = await env
     say("env_ready")
-    w = await write_test(inst.problem_statement, base, say)
-    ev["writer"] = {"attempts": w.attempts, "reason": w.reason, "docs_queries": w.queries,
+    brief = await brief_task
+    ev["research"] = {"queries": brief.queries, "sources": brief.sources}
+    say("research", {"sources": len(brief.sources)})
+    w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer())
+    ev["writer"] = {"attempts": w.attempts, "reason": w.reason,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
                     "submissions": getattr(w, "submissions", [])}
     if w.test_code is None:

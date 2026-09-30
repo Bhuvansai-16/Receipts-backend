@@ -13,7 +13,6 @@ from deepagents.backends.protocol import ExecuteResponse
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
-from langchain_tavily import TavilySearch
 from langsmith import traceable
 from pydantic import BaseModel, Field
 
@@ -21,13 +20,6 @@ from . import config, sandbox
 from .sandbox import ACTIVATE, ENV, TEST_ARGS, TEST_PATH, run_pytest, text
 from .verdict import PytestRun, repro_check
 
-CODE_HOSTS = ["github.com", "gitlab.com", "bitbucket.org", "githubusercontent.com", "sourcegraph.com",
-              "gitee.com", "codeberg.org", "huggingface.co", "swebench.com"]
-# ponytail: allowlist of docs sites for the in-scope repos; readthedocs `_modules` pages can still show
-# newer source, so blindness against the web is best-effort (see README).
-DOC_DOMAINS = ["readthedocs.io", "docs.python.org", "pydata.org", "scikit-learn.org", "matplotlib.org",
-               "sphinx-doc.org", "pytest.org", "palletsprojects.com", "astropy.org", "xarray.dev", "numpy.org",
-               "scipy.org", "python-requests.org"]
 
 EXPLORE_LIMIT = 16  # look-around tool calls before the first submit_test
 RETRY_ALLOWANCE = 6  # more after each submission, to act on what was rejected
@@ -61,7 +53,6 @@ Rules:
   tests that go beyond the issue.
 - Keep it small: 1-2 focused test functions, no network access, no new dependencies.
 - Stop as soon as submit_test answers ACCEPTED.
-- docs_search is for library/API documentation only.
 """
 
 
@@ -263,7 +254,6 @@ class WriterResult:
     base_run: PytestRun | None = None
     attempts: int = 0
     reason: str = "writer never submitted a test"
-    queries: list[str] = field(default_factory=list)
     log: list[dict] = field(default_factory=list)
     scope: str = ""  # what the scope check pruned and why
     submissions: list[dict] = field(default_factory=list)  # every counted attempt: its file and verdict
@@ -281,18 +271,14 @@ class _CommandLog(list):
         self._on_count(len(self))
 
 
-async def write_test(issue: str, base_image, emit=None) -> WriterResult:
+async def write_test(issue: str, base_image, emit=None, *, brief: str = "", history: str = "",
+                     role: str = "writer") -> WriterResult:
+    """brief: the research docs (research.Brief.for_writer); history: what a failed attempt ended on; role: the
+    writer model's config role."""
     out = WriterResult()
     emit = emit or (lambda type_, data=None: None)
     out.log = _CommandLog(lambda n: emit("writer_progress", {"commands": n}))
     backend = await agent_backend(await blind_workspace(base_image), out.log)
-    tavily = TavilySearch(max_results=5, include_domains=DOC_DOMAINS, exclude_domains=CODE_HOSTS)
-
-    @tool
-    async def docs_search(query: str) -> str:
-        """Search library/API documentation sites. Code hosting sites are excluded."""
-        out.queries.append(query)
-        return str(await tavily.ainvoke({"query": query}))[:6000]
 
     async def submit() -> str:
         before = out.attempts
@@ -366,13 +352,14 @@ async def write_test(issue: str, base_image, emit=None) -> WriterResult:
         return "ACCEPTED. Stop now."
 
     cases = await stated_cases(issue)
-    agent = create_deep_agent(model=config.llm("writer"), tools=[docs_search, submit_test],
+    agent = create_deep_agent(model=config.llm(role), tools=[submit_test],
                               system_prompt=PROMPT, backend=backend, middleware=[ExplorationBudget(submit_test)])
-    brief = f"Issue:\n\n{issue}" + ("\n\nCases the issue states (cover each):" + "".join(f"\n- {c}" for c in cases)
-                                     if cases else "")
+    message = (f"Issue:\n\n{issue}"
+               + ("\n\nCases the issue states (cover each):" + "".join(f"\n- {c}" for c in cases) if cases else "")
+               + brief + history)
     stopped = ""
     try:
-        await agent.ainvoke({"messages": [{"role": "user", "content": brief}]},
+        await agent.ainvoke({"messages": [{"role": "user", "content": message}]},
                             config={"recursion_limit": 150, "run_name": "blind_test_writer"})
     except WriterDone:
         pass

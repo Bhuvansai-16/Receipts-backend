@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from receipts import engine, swebench
+from receipts import engine, research, swebench
 from receipts.sandbox import MARKER, TEST_ARGS
 from receipts.swebench import Instance
 
@@ -40,8 +40,12 @@ def fakes(monkeypatch):
     async def base_image(iid):
         return Img("base")
 
-    async def write_test(issue, img, emit=None):
-        return SimpleNamespace(test_code="def test_bug(): assert 1 == 2", attempts=1, reason="ok", queries=[], log=[])
+    async def write_test(issue, img, emit=None, **kw):
+        return SimpleNamespace(test_code="def test_bug(): assert 1 == 2", attempts=1, reason="ok", log=[],
+                               submissions=[])
+
+    async def no_research(repo, issue, search=None):
+        return research.Brief()
 
     async def judge(*a):
         return engine.Judgement(faithful=True, reason="matches issue")
@@ -49,6 +53,7 @@ def fakes(monkeypatch):
     for name, fn in [("classify", classify), ("write_test", write_test), ("judge", judge)]:
         monkeypatch.setattr(engine, name, fn)
     monkeypatch.setattr(swebench, "base_image", base_image)  # Instance.base_image() goes through it
+    monkeypatch.setattr(engine.research, "research", no_research)
     monkeypatch.setattr(engine.config, "contree", lambda: None)
 
 
@@ -83,7 +88,7 @@ def test_events_fire_in_order_for_a_proven_run():
     seen = []
     ev = asyncio.run(engine.check(INST, PATCH, emit=lambda t, d: seen.append(t)))
     assert ev["verdict"] == "PROVEN"
-    assert seen[:3] == ["claim", "env_ready", "test_accepted"]
+    assert seen[:4] == ["claim", "env_ready", "research", "test_accepted"]
     assert seen.count("fork") == 6 and seen[-2:] == ["verdict", "done"]
     assert seen.index("suite") > max(i for i, t in enumerate(seen) if t == "fork")
     assert [e["type"] for e in ev["events"]] == seen  # stored for replay
@@ -160,3 +165,21 @@ def test_no_checkable_claim_stops_the_environment_build(monkeypatch):
     monkeypatch.setattr(engine, "classify", classify)
     ev = asyncio.run(asyncio.wait_for(engine.check(INST, PATCH), 5))
     assert ev["verdict"] == "NO_CHECKABLE_CLAIM" and cancelled == [True]
+
+
+def test_research_brief_reaches_the_writer(monkeypatch):
+    seen = {}
+
+    async def brief(repo, issue, search=None):
+        return research.Brief(queries=["q"], sources=[{"title": "t", "url": "u"}], notes="- t (u): docs")
+
+    async def write_test(issue, img, emit=None, **kw):
+        seen.update(kw)
+        return SimpleNamespace(test_code="def test_bug(): assert 1 == 2", attempts=1, reason="ok", log=[],
+                               submissions=[])
+
+    monkeypatch.setattr(engine.research, "research", brief)
+    monkeypatch.setattr(engine, "write_test", write_test)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert "docs" in seen["brief"] and ev["research"]["sources"] == [{"title": "t", "url": "u"}]
+    assert "research" in [e["type"] for e in ev["events"]]

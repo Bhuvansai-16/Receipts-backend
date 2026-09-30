@@ -80,7 +80,6 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
 
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
-    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
 
     async def scope_check(issue, test_code, failing, cases):
         return writer.Scope(faithful_tests=["test_bug"], reason="ok")
@@ -143,7 +142,6 @@ def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=No
 
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: make_agent(k) if make_agent else Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
-    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
                      ("scope_check", scope_check), ("stated_cases", stated_cases),
                      ("after_fix_check", after_fix_check)]:
@@ -208,7 +206,6 @@ def test_writer_streams_its_command_count(monkeypatch):
 
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
-    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
     monkeypatch.setattr(writer, "stated_cases", lambda issue: asyncio.sleep(0, []))
@@ -293,7 +290,6 @@ def test_writer_agent_runs_with_the_exploration_budget(monkeypatch):
 
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: seen.update(k) or Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
-    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
     monkeypatch.setattr(writer, "stated_cases", lambda issue: asyncio.sleep(0, []))
@@ -383,7 +379,6 @@ def test_submitting_before_the_file_exists_costs_no_attempt(monkeypatch):
 
     monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent(k["tools"]))
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
-    monkeypatch.setattr(writer, "TavilySearch", lambda **k: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
     monkeypatch.setattr(writer, "stated_cases", lambda issue: asyncio.sleep(0, []))
