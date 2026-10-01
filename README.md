@@ -132,3 +132,7 @@ Evidence JSON lands in `runs/`. Traces in LangSmith project `receipts`.
 The writer model was chosen by an A/B on five real pull requests (`scripts/eval_prs.py`): Nemotron 3 Super wrote a
 valid blind test for 4 of 5 with half the tokens; Nemotron 3.5 Lightning for none. Set `MODEL_TEST_WRITER` (first
 attempt) and `MODEL_TEST_WRITER_STRONG` (the one automatic retry) to change them.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
