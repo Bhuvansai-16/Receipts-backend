@@ -1,6 +1,8 @@
 """Orchestrator: classify -> blind test -> forks -> verdict rules -> second opinion before REFUTED."""
 import asyncio
+import hashlib
 import json
+import logging
 import re
 import time
 from collections import Counter
@@ -17,8 +19,11 @@ from pydantic import BaseModel
 from . import config, research
 from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
 from .swebench import Instance
-from .verdict import MIXED, PytestRun, Verdict, fix_verdict, partial_fix, restrict, suite_candidates
-from .writer import retry_history, write_test
+from .verdict import (MIXED, PytestRun, Verdict, fix_verdict, partial_fix, repro_check, reproduces, restrict,
+                      suite_candidates)
+from .writer import WriterResult, retry_history, write_test
+
+log = logging.getLogger("uvicorn.error")
 
 
 class Claim(BaseModel):
@@ -33,6 +38,52 @@ class Judgement(BaseModel):
 
 def changed_files(patch: str) -> list[str]:
     return re.findall(r"^diff --git a/(\S+)", patch, flags=re.M)
+
+
+def blind_test_key(inst) -> str:
+    """Checks that can share a blind test: same repository, base and issue text. The test never saw a PR."""
+    base = getattr(inst, "base_sha", None) or inst.instance_id  # a SWE-bench image fixes its commit
+    return hashlib.sha256(f"{inst.repo}\n{base}\n{inst.problem_statement}".encode()).hexdigest()
+
+
+async def _stored_test(tests, key: str) -> dict | None:
+    if tests is None:
+        return None
+    try:
+        return await tests.get_blind_test(key)
+    except Exception as e:  # a cache can make a check faster, never fail it
+        log.warning("blind test lookup failed: %s", e)
+        return None
+
+
+async def _forget(tests, key: str) -> None:
+    try:
+        await tests.forget_blind_test(key)
+    except Exception as e:
+        log.warning("forgetting a blind test failed: %s", e)
+
+
+async def _reuse(stored: dict, base, tests, key: str, say) -> WriterResult | None:
+    """The stored test, if it still reproduces the bug on this base. Otherwise it is forgotten (None)."""
+    run = await run_pytest(base, TEST_ARGS, {TEST_PATH: stored["test_code"].encode()})
+    if not repro_check(run)[0]:  # a changed environment or a sandbox error: write a fresh test
+        await _forget(tests, key)
+        return None
+    say("test_reused", {"from": stored["run_id"]})
+    return WriterResult(test_code=stored["test_code"], base_run=run, reason="reused", reused_from=stored["run_id"])
+
+
+async def _remember(tests, key: str, repo: str, run_id: str | None, w, reproduced: bool, opinion) -> None:
+    """Keep a written test that reproduced on every base run; forget one a second opinion doubted."""
+    if tests is None or w.test_code is None:
+        return
+    if opinion and opinion.get("faithful") is False:
+        await _forget(tests, key)
+    elif reproduced and run_id and not getattr(w, "reused_from", ""):
+        try:
+            await tests.save_blind_test(key, repo, run_id, w.test_code)
+        except Exception as e:
+            log.warning("keeping a blind test failed: %s", e)
 
 
 def claim_prompt(issue: str, patch: str) -> str:
@@ -138,8 +189,11 @@ def save_evidence(ev: dict, run_id: str) -> Path:
 
 
 @traceable(name="receipts_check")
-async def check(inst: Instance, patch: str | None, emit=None) -> dict:
+async def check(inst: Instance, patch: str | None, emit=None, *, tests=None, run_id: str | None = None) -> dict:
     """patch=None means a PR that changes nothing (known-wrong control).
+
+    tests: where reusable blind tests are kept (the run store); None, as in the CLI and evaluations, always
+    writes a new one. run_id names this check when it keeps its test.
 
     emit(type, data) is called as each stage lands (the web UI streams these); events are also
     stored in the evidence as ev["events"] so a finished run replays identically.
@@ -155,7 +209,7 @@ async def check(inst: Instance, patch: str | None, emit=None) -> dict:
 
     with get_usage_metadata_callback() as usage:
         try:
-            v, reason = await _pipeline(inst, patch, ev, say)
+            v, reason = await _pipeline(inst, patch, ev, say, tests, run_id)
         except openai.APIError as e:  # a model provider outage (its client already retried): say so plainly
             v, reason = Verdict.UNPROVEN, f"a model was unavailable: {type(e).__name__}: {e}"
         except Exception as e:  # asymmetry rule: anything unexpected is UNPROVEN, never REFUTED
@@ -167,11 +221,13 @@ async def check(inst: Instance, patch: str | None, emit=None) -> dict:
     return ev
 
 
-async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[Verdict, str]:
+async def _pipeline(inst: Instance, patch: str | None, ev: dict, say, tests=None, run_id=None) -> tuple[Verdict, str]:
     # The environment doesn't depend on the claim, so it builds while the claim is classified (~10 s saved).
     # ponytail: a PR with nothing to check pays for a few seconds of an abandoned build.
     env = asyncio.ensure_future(inst.base_image())
+    key = blind_test_key(inst)
     try:
+        stored = await _stored_test(tests, key)
         claim = await classify(inst.problem_statement, patch or "")
     except BaseException:
         env.cancel()
@@ -182,29 +238,35 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
         env.cancel()
         return Verdict.NO_CHECKABLE_CLAIM, f"classified as '{claim.kind}': nothing to check"
 
-    brief_task = asyncio.ensure_future(research.research(inst.repo, inst.problem_statement))
+    brief_task = None if stored else asyncio.ensure_future(research.research(inst.repo, inst.problem_statement))
     base = await env
     say("env_ready")
-    brief = await brief_task
-    ev["research"] = {"queries": brief.queries, "sources": brief.sources, "notes": brief.notes, "errors": brief.errors}
-    say("research", {"sources": len(brief.sources)})
-    w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer())
-    # The writer failed, not the PR, and no fork has run yet: one retry, never more. Not when the model provider
-    # failed: its client already retried, and the same provider would only fail again.
-    if w.test_code is None and not getattr(w, "provider_error", ""):
-        say("writer_retry", {"model": config.MODELS["writer_strong"], "why": w.reason[:300]})
-        ev["writer_first"] = {"attempts": w.attempts, "reason": w.reason,
-                              "submissions": getattr(w, "submissions", []), "tool_log": w.log}
-        w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer(),
-                             history=retry_history(w), role="writer_strong")
+    w = await _reuse(stored, base, tests, key, say) if stored else None
+    if w is None:
+        brief = await (brief_task or research.research(inst.repo, inst.problem_statement))
+        ev["research"] = {"queries": brief.queries, "sources": brief.sources, "notes": brief.notes,
+                          "errors": brief.errors}
+        say("research", {"sources": len(brief.sources)})
+        w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer())
+        # The writer failed, not the PR, and no fork has run yet: one retry, never more. Not when the model
+        # provider failed: its client already retried, and the same provider would only fail again.
+        if w.test_code is None and not getattr(w, "provider_error", ""):
+            say("writer_retry", {"model": config.MODELS["writer_strong"], "why": w.reason[:300]})
+            ev["writer_first"] = {"attempts": w.attempts, "reason": w.reason,
+                                  "submissions": getattr(w, "submissions", []), "tool_log": w.log}
+            w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer(),
+                                 history=retry_history(w), role="writer_strong")
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
                     "submissions": getattr(w, "submissions", [])}
+    reused = getattr(w, "reused_from", "")
+    if reused:
+        ev["writer"]["reused_from"] = reused
     if w.test_code is None and getattr(w, "provider_error", ""):
         return Verdict.UNPROVEN, f"the test writer's model was unavailable: {w.provider_error}"
     if w.test_code is None:
         return Verdict.UNPROVEN, f"no valid reproducing test after {w.attempts} attempt(s): {w.reason}"
-    say("test_accepted", {"attempts": w.attempts})
+    say("test_accepted", {"attempts": w.attempts, **({"reused_from": reused} if reused else {})})
 
     test = {TEST_PATH: w.test_code.encode()}
     pr = base if patch is None else await apply_patch(base, patch)
@@ -248,14 +310,15 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
         ev["second_opinion"] = j.model_dump()
         say("second_opinion", ev["second_opinion"])
         if not j.faithful:
-            return Verdict.UNPROVEN, f"second opinion doubts the test: {j.reason}"
+            v, reason = Verdict.UNPROVEN, f"second opinion doubts the test: {j.reason}"
     # an explanation for the reader, never a verdict change; asked only when the runs show a partial fix, since
     # any other mix (a new failure, a sandbox outage) may be the test's doing (sympy #15 live)
     elif reason == MIXED and partial_fix(base_runs, pr_runs):
         try:
             j = await judge_mixed(inst.problem_statement, w.test_code, pr_runs[0].output)
+            ev["second_opinion"] = {**j.model_dump(), "about": "mixed"}
+            say("second_opinion", ev["second_opinion"])
         except Exception:  # only an explanation: without it the page uses neutral words
-            return v, reason
-        ev["second_opinion"] = {**j.model_dump(), "about": "mixed"}
-        say("second_opinion", ev["second_opinion"])
+            pass
+    await _remember(tests, key, inst.repo, run_id, w, reproduces(base_runs), ev.get("second_opinion"))
     return v, reason

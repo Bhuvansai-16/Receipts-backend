@@ -48,7 +48,7 @@ def gh(monkeypatch):
     async def fake_pr_target(installation_id, repo_id, full_name, number):
         return SimpleNamespace(instance_id=f"{full_name}#{number}", repo=full_name), "diff --git a/x b/x\n", "head1"
 
-    async def fake_check(target, patch, emit=None):
+    async def fake_check(target, patch, emit=None, **kw):
         emit("claim", {"kind": "fix", "claim": "c"})
         return {"instance_id": target.instance_id, "repo": target.repo, "verdict": "PROVEN", "reason": "r",
                 "seconds": 1.0, "tokens": {}}

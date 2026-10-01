@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from receipts import engine, research, swebench, verdict
-from receipts.sandbox import MARKER, TEST_ARGS
+from receipts import db, engine, research, swebench, verdict
+from receipts.sandbox import MARKER, TEST_ARGS, TEST_PATH
 from receipts.swebench import Instance
 
 P2P = ["t.py::a", "t.py::b"]
@@ -343,3 +343,100 @@ def test_a_model_outage_anywhere_in_the_pipeline_says_so(monkeypatch):
     monkeypatch.setattr(engine, "classify", classify)
     ev = asyncio.run(engine.check(INST, PATCH))
     assert ev["verdict"] == "UNPROVEN" and ev["reason"].startswith("a model was unavailable: APIConnectionError")
+
+
+def test_checks_of_the_same_issue_and_base_share_a_key():
+    same = Instance("x__y-1", "psf/requests", "issue", "another patch", [])
+    assert engine.blind_test_key(INST) == engine.blind_test_key(same)
+    assert engine.blind_test_key(INST) != engine.blind_test_key(Instance("x__y-2", "psf/requests", "issue", PATCH, []))
+    assert engine.blind_test_key(INST) != engine.blind_test_key(Instance("x__y-1", "psf/requests", "other", PATCH, []))
+
+
+def test_a_pull_request_check_keys_on_its_base_commit():
+    from receipts.targets import RepoTarget
+    a, b = (RepoTarget(f"o/r#{n}", "o/r", "issue", "sha1", [], None) for n in (1, 2))
+    assert engine.blind_test_key(a) == engine.blind_test_key(b)
+    assert engine.blind_test_key(a) != engine.blind_test_key(RepoTarget("o/r#3", "o/r", "issue", "sha2", [], None))
+
+
+def _store_with(code="def test_bug(): assert 1 == 2", run_id="r1"):
+    store = db.MemoryRuns()
+    asyncio.run(store.save_blind_test(engine.blind_test_key(INST), INST.repo, run_id, code))
+    return store
+
+
+def test_a_stored_test_is_reused_without_research_or_writer(monkeypatch):
+    async def never(*a, **k):
+        raise AssertionError("a reused test needs no research and no writer")
+
+    monkeypatch.setattr(engine, "write_test", never)
+    monkeypatch.setattr(engine.research, "research", never)
+    seen = []
+    ev = asyncio.run(engine.check(INST, PATCH, emit=lambda t, d: seen.append(t), tests=_store_with(), run_id="r2"))
+    assert ev["verdict"] == "PROVEN", ev["reason"]
+    assert ev["writer"]["reused_from"] == "r1" and ev["writer"]["attempts"] == 0
+    assert seen.index("test_reused") < seen.index("test_accepted") and "research" not in seen
+
+
+class StaleImg(Img):
+    """The stored test passes on this base: it no longer reproduces the bug here."""
+
+    async def run(self, shell=None, files=None, **kw):
+        if b"stale" in (files or {}).get(TEST_PATH, b""):
+            res = {"receipts_test.py::test_bug": PASSED}
+            return SimpleNamespace(stdout=MARKER + json.dumps(res), stderr="", exit_code=0)
+        return await super().run(shell, files, **kw)
+
+
+def test_a_stale_stored_test_is_replaced_by_a_new_one(monkeypatch):
+    async def base_image(iid):
+        return StaleImg("base")
+
+    monkeypatch.setattr(swebench, "base_image", base_image)
+    store = _store_with(code="def test_bug(): assert 'stale'")
+    ev = asyncio.run(engine.check(INST, PATCH, tests=store, run_id="r2"))
+    assert ev["verdict"] == "PROVEN" and "reused_from" not in ev["writer"]
+    assert store.blind_tests[engine.blind_test_key(INST)]["run_id"] == "r2"
+
+
+def test_an_accepted_test_is_kept_for_the_next_check():
+    store = db.MemoryRuns()
+    asyncio.run(engine.check(INST, PATCH, tests=store, run_id="r1"))
+    kept = store.blind_tests[engine.blind_test_key(INST)]
+    assert kept["run_id"] == "r1" and kept["test_code"] == "def test_bug(): assert 1 == 2"
+
+
+def _doubting(monkeypatch):
+    async def judge(*a):
+        return engine.Judgement(faithful=False, reason="asks more than the issue")
+
+    monkeypatch.setattr(engine, "judge", judge)
+
+
+def test_a_doubted_test_is_never_kept(monkeypatch):
+    _doubting(monkeypatch)
+    store = db.MemoryRuns()
+    ev = asyncio.run(engine.check(INST, None, tests=store, run_id="r1"))
+    assert ev["verdict"] == "UNPROVEN" and store.blind_tests == {}
+
+
+def test_a_reused_test_that_gets_doubted_is_forgotten(monkeypatch):
+    _doubting(monkeypatch)
+    store = _store_with()
+    asyncio.run(engine.check(INST, None, tests=store, run_id="r2"))
+    assert store.blind_tests == {}
+
+
+def test_a_broken_store_never_fails_a_check():
+    class Broken:
+        async def get_blind_test(self, key):
+            raise OSError("database down")
+
+        async def save_blind_test(self, *a):
+            raise OSError("database down")
+
+        async def forget_blind_test(self, key):
+            raise OSError("database down")
+
+    ev = asyncio.run(engine.check(INST, PATCH, tests=Broken(), run_id="r1"))
+    assert ev["verdict"] == "PROVEN", ev["reason"]

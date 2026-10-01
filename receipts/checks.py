@@ -91,7 +91,8 @@ async def _execute(live, instance_id, prepare, runs, source, on_start, on_finish
                 await on_start(live.id)
             target, patch = await prepare()
             # "done" is sent below, after the evidence is stored, so clients never read a half-written run
-            evidence = await engine.check(target, patch, emit=lambda t, d: t != "done" and live.publish(t, d))
+            evidence = await engine.check(target, patch, emit=lambda t, d: t != "done" and live.publish(t, d),
+                                          tests=runs, run_id=live.id)
             status = "done"
     except asyncio.CancelledError:  # the owner pressed Stop (see cancel)
         live.publish("error", {"message": STOPPED})

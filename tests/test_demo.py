@@ -31,7 +31,7 @@ def api(monkeypatch, tmp_path):
     gate.set()
     seen = {}
 
-    async def fake_check(inst, patch, emit=None):
+    async def fake_check(inst, patch, emit=None, **kw):
         seen["patch"] = patch
         while not gate.is_set():  # a test holds the check open to see a second visitor join it
             await asyncio.sleep(0.01)

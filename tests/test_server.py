@@ -1,3 +1,4 @@
+import time
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
@@ -28,8 +29,9 @@ def api(monkeypatch, tmp_path):
     server.LIVE.clear()
     seen = {}
 
-    async def fake_check(inst: Instance, patch, emit=None):
+    async def fake_check(inst: Instance, patch, emit=None, **kw):
         seen["patch"] = patch
+        seen["kw"] = kw
         emit("claim", {"kind": "fix", "claim": "c"})
         emit("fork", {"side": "base", "n": 1, "passed": False, "message": "assert 1 == 2"})
         emit("verdict", {"verdict": "PROVEN", "reason": "r", "seconds": 1.0, "tokens": 10})
@@ -122,7 +124,7 @@ def test_unfinished_run_is_never_cached(api):
 
 
 def test_engine_crash_ends_the_run_as_error(api, monkeypatch):
-    async def crash(inst, patch, emit=None):
+    async def crash(inst, patch, emit=None, **kw):
         raise RuntimeError("sandbox exploded")
 
     monkeypatch.setattr(server.engine, "check", crash)
@@ -236,7 +238,7 @@ def test_github_repos_are_served_and_need_sign_in(api):
 def test_owner_can_stop_a_running_check(api, monkeypatch):
     import asyncio as aio
 
-    async def slow_check(inst, patch, emit=None):
+    async def slow_check(inst, patch, emit=None, **kw):
         emit("claim", {"kind": "fix", "claim": "c"})
         await aio.sleep(60)
 
@@ -258,3 +260,12 @@ def test_live_events_carry_seconds_since_the_run_started():
     live.publish("claim", {})
     live.publish("verdict", {})
     assert all(isinstance(e["t"], float) for e in live.events) and live.events[0]["t"] <= live.events[1]["t"]
+
+
+def test_a_check_gets_the_run_store_for_reusing_blind_tests(api):
+    run_id = start(signed_in(api))
+    for _ in range(100):
+        if "kw" in api.seen:
+            break
+        time.sleep(0.02)
+    assert api.seen["kw"]["tests"] is api.store and api.seen["kw"]["run_id"] == run_id

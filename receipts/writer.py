@@ -262,6 +262,7 @@ class WriterResult:
     scope: str = ""  # what the scope check pruned and why
     submissions: list[dict] = field(default_factory=list)  # every counted attempt: its file and verdict
     provider_error: str = ""  # set when the model provider failed, so the engine doesn't blame or retry the writer
+    reused_from: str = ""  # run id of the check whose blind test this one reuses
 
 
 def retry_history(first: WriterResult) -> str:
