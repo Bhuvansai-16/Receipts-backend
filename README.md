@@ -109,16 +109,22 @@ Evidence JSON lands in `runs/`. Traces in LangSmith project `receipts`.
 
 - The test writer never receives the patch, SWE-bench's hidden tests (`test_patch`, `FAIL_TO_PASS`) or hints.
 - It works in its own sandbox copy with `.git` removed; every verdict run forks the untouched base image.
-- Tavily is limited to documentation sites, with code hosts excluded.
-- Residual risk: the sandbox has network access and docs sites can show newer source. Every shell command
-  and search the agent ran is recorded in the evidence JSON (`writer.tool_log`, `writer.docs_queries`) so a
-  leak can be audited.
+- The research brief searches only the library's documentation site, from names in the issue text. Code hosts
+  are excluded by Tavily and dropped again locally, as are Sphinx "view source" pages, which can show newer code.
+- Residual risk: the sandbox has network access. Every shell command the agent ran and every source the brief
+  used is recorded in the evidence JSON (`writer.tool_log`, `research.sources`) so a leak can be audited.
 
 ## Models
 
 | Step | Model |
 |---|---|
 | Claim classification | Nemotron 3 Nano |
-| Blind test writing (Deepagents agent in sandbox) | Nemotron 3.5 Lightning |
+| Research brief before the writer starts (library docs for the APIs the issue names) | Tavily |
+| Blind test writing (Deepagents agent in sandbox) | Nemotron 3 Super |
+| One automatic retry when no test was accepted | `MODEL_TEST_WRITER_STRONG` (see below) |
 | Scope check of each submitted test (only what the issue asks) | Nemotron 3 Super |
 | Second opinion before REFUTED | Nemotron 3 Ultra |
+
+The writer model was chosen by an A/B on five real pull requests (`scripts/eval_prs.py`): Nemotron 3 Super wrote a
+valid blind test for 4 of 5 with half the tokens; Nemotron 3.5 Lightning for none. Set `MODEL_TEST_WRITER` (first
+attempt) and `MODEL_TEST_WRITER_STRONG` (the one automatic retry) to change them.

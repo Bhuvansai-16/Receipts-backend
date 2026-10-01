@@ -114,7 +114,21 @@ A fixed first step, not an optional tool.
 4. Check-run output.
 5. Frontend.
 
-## Open questions
+## Results (2026-10-01)
 
-- Whether the stronger model pays for itself: decided by the A/B, not assumed.
-- Nebius credits left: sizes the live evaluation.
+Writer-model A/B on sympy #13, #14, #15, #16, #26 (`scripts/eval_prs.py`, pipeline with fixes 1-7 and the research
+brief, before self-recovery). Prices from the Token Factory catalog (input / output per 1M tokens).
+
+| Writer | Valid test | PROVEN | Tokens (5 checks) | Worst check | Price | Model spend |
+|---|---|---|---|---|---|---|
+| Nemotron 3.5 Lightning | 0 of 5 | 0 | 1.73M | 971K | $0.06 / $0.24 | about $0.11 |
+| Nemotron 3 Super | 4 of 5 | 3 (#13, #14, #26) | 0.78M | 549K | $0.30 / $0.90 | about $0.25 |
+
+Decisions:
+
+- Super passes the gate (at least 3 of 5, under 1M tokens) and is the retry model.
+- **Ruling beyond the spec: Super is also the first writer.** Lightning wrote no valid test and spent more tokens
+  failing than Super spent succeeding; about 6 cents per valid test with Super. `MODEL_TEST_WRITER` switches back.
+- Ultra as writer, probed once on #16 (where Super failed): Ultra wrote no valid test either; the self-recovery
+  retry on Super, given Ultra's failure, wrote one first time. The retry's value is the history and a fresh
+  attempt, not a bigger model, so `MODEL_TEST_WRITER_STRONG` stays Super ($0.30 vs Ultra's $1.00 per 1M input).

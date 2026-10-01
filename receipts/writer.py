@@ -1,4 +1,4 @@
-"""Blind test writer: a Deepagents agent (Nemotron Lightning) working inside a Contree sandbox.
+"""Blind test writer: a Deepagents agent (model from config: writer, writer_strong) inside a Contree sandbox.
 
 Integrity rule D2: the agent sees the issue and the unpatched repo only, never the PR's patch.
 Acceptance is decided by code (repro_check on a clean fork), not by the agent.
