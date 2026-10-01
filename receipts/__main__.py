@@ -2,6 +2,7 @@
          python -m receipts run INSTANCE_ID [--patch gold|none|FILE]  |  python -m receipts migrate | import-runs"""
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -62,7 +63,7 @@ def main() -> None:
     r.add_argument("instance_id")
     r.add_argument("--patch", default="gold", help="gold | none | path to a .diff file")
     v = sub.add_parser("serve", help="API server (the UI is the separate receipts-frontend repo)")
-    v.add_argument("--port", type=int, default=8000)
+    v.add_argument("--port", type=int, help="default: $PORT (Cloud Run), else 8000")
     sub.add_parser("migrate", help="apply database migrations (uses DATABASE_URL_UNPOOLED)")
     sub.add_parser("import-runs", help="load runs/*.json into the database as public example receipts")
     a = ap.parse_args()
@@ -82,7 +83,9 @@ def main() -> None:
 
         # psycopg's async pool needs a selector event loop; uvicorn defaults to Proactor on Windows
         loop = "asyncio:SelectorEventLoop" if sys.platform == "win32" else "auto"
-        return uvicorn.run("receipts.server:app", host="localhost", port=a.port, loop=loop)
+        cloud_port = os.environ.get("PORT")  # Cloud Run: traffic arrives from outside, so every interface
+        return uvicorn.run("receipts.server:app", host="0.0.0.0" if cloud_port else "localhost",
+                           port=a.port or int(cloud_port or 8000), loop=loop)
 
     from .engine import check, new_run_id, save_evidence
     from .swebench import load_instance

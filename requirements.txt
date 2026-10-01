@@ -1,0 +1,20 @@
+# The Receipts API image for Cloud Run. Local development uses the global Python install (see README).
+contree-sdk==0.3.6
+contree-client[httpx]==0.4.0
+deepagents==0.7.15
+langchain==1.4.2
+langchain-core==1.6.3
+langchain-openai==1.4.1
+langchain-tavily==0.2.18
+langsmith==0.13.0
+openai==2.54.0
+datasets==3.6.0
+python-dotenv==1.2.3
+fastapi==0.141.1
+uvicorn==0.52.4
+sse-starlette==3.4.11
+psycopg[binary]==3.3.5
+psycopg-pool==3.3.1
+httpx==0.28.1
+PyJWT==2.14.0
+cryptography==50.0.1

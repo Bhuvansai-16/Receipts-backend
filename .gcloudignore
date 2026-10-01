@@ -1,0 +1,14 @@
+# `gcloud run deploy --source .` uploads this folder to Cloud Build: secrets and local data never go.
+.gcloudignore
+.env
+*.pem
+.git
+.gitignore
+.cache
+runs
+tests
+docs
+scripts
+.superpowers
+.pytest_cache
+**/__pycache__

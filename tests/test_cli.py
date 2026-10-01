@@ -45,6 +45,20 @@ def test_serve_uses_a_selector_loop_on_windows(monkeypatch):
     seen = {}
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw, app=app))
     monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delenv("PORT", raising=False)
     monkeypatch.setattr(sys, "argv", ["receipts", "serve", "--port", "8123"])
     cli.main()
     assert seen == {"app": "receipts.server:app", "host": "localhost", "port": 8123, "loop": "asyncio:SelectorEventLoop"}
+
+
+def test_serve_listens_on_cloud_runs_port_on_every_interface(monkeypatch):
+    # Cloud Run sets PORT and routes to the container from outside, so localhost would never answer.
+    import uvicorn
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("PORT", "8080")
+    monkeypatch.setattr(sys, "argv", ["receipts", "serve"])
+    cli.main()
+    assert seen == {"host": "0.0.0.0", "port": 8080, "loop": "auto"}

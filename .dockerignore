@@ -1,0 +1,12 @@
+# Never in the image: secrets, local data, history, tests and docs.
+.env
+*.pem
+.git
+.cache
+runs
+tests
+docs
+scripts
+.superpowers
+.pytest_cache
+**/__pycache__
