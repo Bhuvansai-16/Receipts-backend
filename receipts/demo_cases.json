@@ -1,0 +1,56 @@
+[
+  {
+    "id": "xarray-merge-fix",
+    "instance_id": "pydata__xarray-4629",
+    "repo": "pydata/xarray",
+    "title": "merge(combine_attrs='override') shares attrs with its first input",
+    "kind": "real fix",
+    "patch": "gold",
+    "summary": "The change that fixed it upstream: the override case returns a copy of the attrs."
+  },
+  {
+    "id": "xarray-merge-empty",
+    "instance_id": "pydata__xarray-4629",
+    "repo": "pydata/xarray",
+    "title": "merge(combine_attrs='override') shares attrs with its first input",
+    "kind": "empty patch",
+    "patch": "none",
+    "summary": "A pull request that claims the fix but changes nothing."
+  },
+  {
+    "id": "xarray-merge-wrong",
+    "instance_id": "pydata__xarray-4629",
+    "repo": "pydata/xarray",
+    "title": "merge(combine_attrs='override') shares attrs with its first input",
+    "kind": "wrong patch",
+    "patch": "xarray-4629-copy-unused.diff",
+    "summary": "Looks like a fix: it copies the attrs, then still returns the original dict."
+  },
+  {
+    "id": "requests-get-fix",
+    "instance_id": "psf__requests-1142",
+    "repo": "psf/requests",
+    "title": "requests.get always sends a Content-Length header",
+    "kind": "real fix",
+    "patch": "gold",
+    "summary": "The change that fixed it upstream: Content-Length 0 only for methods that can carry a body."
+  },
+  {
+    "id": "requests-get-empty",
+    "instance_id": "psf__requests-1142",
+    "repo": "psf/requests",
+    "title": "requests.get always sends a Content-Length header",
+    "kind": "empty patch",
+    "patch": "none",
+    "summary": "A pull request that claims the fix but changes nothing."
+  },
+  {
+    "id": "requests-get-wrong",
+    "instance_id": "psf__requests-1142",
+    "repo": "psf/requests",
+    "title": "requests.get always sends a Content-Length header",
+    "kind": "wrong patch",
+    "patch": "requests-1142-head-only.diff",
+    "summary": "Looks like a fix: it skips Content-Length for HEAD only, so GET still sends it."
+  }
+]
