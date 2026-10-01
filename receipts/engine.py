@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from . import config, research
 from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
 from .swebench import Instance
-from .verdict import MIXED, PytestRun, Verdict, fix_verdict, restrict, suite_candidates
+from .verdict import MIXED, PytestRun, Verdict, fix_verdict, partial_fix, restrict, suite_candidates
 from .writer import retry_history, write_test
 
 
@@ -79,11 +79,11 @@ async def judge_mixed(issue: str, test_code: str, pr_output: str) -> Judgement:
     issue asks for an unevaluated -(x + 2))? If in doubt the test is doubted: nothing is said against the PR."""
     prompt = (
         "A pull request claims to fix the issue below. A test written from the issue alone fails on the unpatched "
-        "code. With the pull request applied, part of the test passes but the failure below remains. Answer "
-        "faithful=true ONLY if the failing assertion checks exactly what the issue asks for, so the change misses "
-        "part of the issue. Answer faithful=false if the assertion itself is wrong: an expected value the issue "
-        "doesn't ask for, built differently from the issue's expectation, or a mistake in the test. If in doubt, "
-        "false. Say in reason which assertion and why, in one or two sentences.\n\n"
+        "code. With the pull request applied, part of the test passes and the failure below remains exactly as "
+        "on the unpatched code. Answer faithful=true ONLY if the failing assertion checks exactly what the issue "
+        "asks for, so the change misses part of the issue. Answer faithful=false if the assertion itself is wrong: "
+        "an expected value the issue doesn't ask for, built differently from the issue's expectation, or a mistake "
+        "in the test. If in doubt, false. Say in reason which assertion and why, in one or two sentences.\n\n"
         f"Issue:\n{issue[:8000]}\n\nTest:\n```python\n{test_code}\n```\n\n"
         f"Failure with the pull request:\n{pr_output[-3000:]}"
     )
@@ -183,16 +183,15 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     base = await env
     say("env_ready")
     brief = await brief_task
-    ev["research"] = {"queries": brief.queries, "sources": brief.sources}
+    ev["research"] = {"queries": brief.queries, "sources": brief.sources, "notes": brief.notes, "errors": brief.errors}
     say("research", {"sources": len(brief.sources)})
     w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer())
     if w.test_code is None:  # the writer failed, not the PR, and no fork has run yet: one retry, never more
         say("writer_retry", {"model": config.MODELS["writer_strong"], "why": w.reason[:300]})
-        first = w
+        ev["writer_first"] = {"attempts": w.attempts, "reason": w.reason,
+                              "submissions": getattr(w, "submissions", []), "tool_log": w.log}
         w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer(),
-                             history=retry_history(first), role="writer_strong")
-        ev["writer_first"] = {"attempts": first.attempts, "reason": first.reason,
-                              "submissions": getattr(first, "submissions", [])}
+                             history=retry_history(w), role="writer_strong")
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
                     "submissions": getattr(w, "submissions", [])}
@@ -243,10 +242,11 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
         say("second_opinion", ev["second_opinion"])
         if not j.faithful:
             return Verdict.UNPROVEN, f"second opinion doubts the test: {j.reason}"
-    elif reason == MIXED and pr_runs:  # an explanation for the reader; the verdict stays Unproven either way
-        failing = next((r for r in pr_runs if any(t.outcome != "passed" for t in r.results.values())), pr_runs[0])
+    # an explanation for the reader, never a verdict change; asked only when the runs show a partial fix, since
+    # any other mix (a new failure, a sandbox outage) may be the test's doing (sympy #15 live)
+    elif reason == MIXED and partial_fix(base_runs, pr_runs):
         try:
-            j = await judge_mixed(inst.problem_statement, w.test_code, failing.output)
+            j = await judge_mixed(inst.problem_statement, w.test_code, pr_runs[0].output)
         except Exception:  # only an explanation: without it the page uses neutral words
             return v, reason
         ev["second_opinion"] = {**j.model_dump(), "about": "mixed"}

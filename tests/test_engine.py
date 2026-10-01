@@ -175,7 +175,8 @@ def test_research_brief_reaches_the_writer(monkeypatch):
     seen = {}
 
     async def brief(repo, issue, search=None):
-        return research.Brief(queries=["q"], sources=[{"title": "t", "url": "u"}], notes="- t (u): docs")
+        return research.Brief(queries=["q", "q2"], sources=[{"title": "t", "url": "u"}], notes="- t: docs",
+                              errors=["q2: ToolException: no results"])
 
     async def write_test(issue, img, emit=None, **kw):
         seen.update(kw)
@@ -186,6 +187,8 @@ def test_research_brief_reaches_the_writer(monkeypatch):
     monkeypatch.setattr(engine, "write_test", write_test)
     ev = asyncio.run(engine.check(INST, PATCH))
     assert "docs" in seen["brief"] and ev["research"]["sources"] == [{"title": "t", "url": "u"}]
+    # the evidence keeps what the writer read and which searches failed
+    assert ev["research"]["notes"] == "- t: docs" and ev["research"]["errors"] == ["q2: ToolException: no results"]
     assert "research" in [e["type"] for e in ev["events"]]
 
 
@@ -224,23 +227,49 @@ def test_only_one_retry(monkeypatch):
 
 
 class MixedImg(Img):
-    """Base fails both tests; with the PR one passes and the other fails differently (a mixed result)."""
+    """Base fails test_a and test_b; with the PR test_a passes and test_b fails with `left` (a mixed result).
+
+    By default test_b fails exactly as on base, a partial fix in the run data (sympy #16 live)."""
+
+    left = "b"
 
     async def run(self, shell=None, files=None, **kw):
         if "/tmp/pr.diff" in (files or {}):
-            return MixedImg("pr")
+            return type(self)("pr")
         args = json.loads(files["/tmp/receipts_args.json"])
         if args != TEST_ARGS:
             return await super().run(shell, files, **kw)
         fail = lambda msg: {"outcome": "failed", "exc": "AssertionError", "msg": msg}  # noqa: E731
         res = {"receipts_test.py::test_a": PASSED if self.name == "pr" else fail("a is wrong"),
-               "receipts_test.py::test_b": fail("expr1=-(x + 2), expected=-x - 2" if self.name == "pr" else "b")}
+               "receipts_test.py::test_b": fail(self.left if self.name == "pr" else "b")}
         return SimpleNamespace(stdout=MARKER + json.dumps(res), stderr="", exit_code=0)
 
 
-def test_a_mixed_result_gets_a_second_opinion_that_never_changes_the_verdict(monkeypatch):
-    # sympy #16: the retry's test expected an evaluated -x - 2 where the issue asks for -(x + 2) unevaluated;
-    # without an opinion the page said "the pull request fixed part of it", blaming the PR on a guess.
+class NewFailureImg(MixedImg):
+    left = "expr1=-(x + 2), expected=-x - 2"  # test_b fails differently with the PR
+
+
+def test_a_mixed_result_without_a_partial_fix_gets_no_opinion(monkeypatch):
+    # sympy #15 live: the PR changed how the test failed and the opinion blamed the PR, but the test could never
+    # pass (srepr never prints evaluate=False). Only a partial fix in the run data backs an opinion.
+    asked = []
+
+    async def base_image(iid):
+        return NewFailureImg("base")
+
+    async def judge_mixed(*a):
+        asked.append(a)
+        return engine.Judgement(faithful=True, reason="the PR misses part of the issue")
+
+    monkeypatch.setattr(swebench, "base_image", base_image)
+    monkeypatch.setattr(engine, "judge_mixed", judge_mixed)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "UNPROVEN" and ev["reason"] == verdict.MIXED
+    assert not asked and "second_opinion" not in ev
+
+
+def test_a_partial_fix_gets_a_second_opinion_that_never_changes_the_verdict(monkeypatch):
+    # The opinion only explains: here it doubts the failing assertion, and the verdict stays Unproven.
     asked = []
 
     async def base_image(iid):
@@ -269,3 +298,19 @@ def test_a_failed_opinion_never_breaks_a_mixed_result(monkeypatch):
     monkeypatch.setattr(engine, "judge_mixed", judge_mixed)
     ev = asyncio.run(engine.check(INST, PATCH))
     assert ev["verdict"] == "UNPROVEN" and ev["reason"] == verdict.MIXED and "second_opinion" not in ev
+
+
+def test_the_first_writers_evidence_survives_a_failed_retry(monkeypatch):
+    # Stored before the retry runs, commands included: a retry that errors must not erase what the first did.
+    calls = []
+
+    async def write_test(issue, img, emit=None, **kw):
+        calls.append(kw)
+        if len(calls) == 2:
+            raise TimeoutError("model unavailable")
+        return SimpleNamespace(test_code=None, attempts=2, reason="writer gave up", log=["cat a.py"], submissions=[])
+
+    monkeypatch.setattr(engine, "write_test", write_test)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "UNPROVEN" and "TimeoutError" in ev["reason"]
+    assert ev["writer_first"] == {"attempts": 2, "reason": "writer gave up", "submissions": [], "tool_log": ["cat a.py"]}

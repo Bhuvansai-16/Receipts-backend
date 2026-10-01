@@ -113,9 +113,22 @@ def fix_verdict(
                       if all(_passed(s, n) for s in base_suites) and not any(_passed(s, n) for s in pr_suites)]
             if broken:
                 return Verdict.REGRESSION, f"fixes the claim but breaks {len(broken)} existing test(s): {', '.join(broken[:10])}"
-        return Verdict.PROVEN, f"test fails on base and passes on the PR in {len(pr_runs)}/{len(pr_runs)} runs; existing tests hold"
+        held = "existing tests hold" if base_suites is not None else "no existing tests were found to run"
+        return Verdict.PROVEN, f"test fails on base and passes on the PR in {len(pr_runs)}/{len(pr_runs)} runs; {held}"
 
     base_sig = _failing(base_runs[0])
     if all(_failing(r) == base_sig for r in pr_runs):
         return Verdict.REFUTED, "test still fails on the PR with the same assertion as on base"
     return Verdict.UNPROVEN, MIXED
+
+
+def partial_fix(base_runs: list[PytestRun], pr_runs: list[PytestRun]) -> bool:
+    """Every PR run passes the same part of the base failures and fails the rest exactly as on base.
+
+    The one mixed result that reads as "the change missed part of the issue". Any other mix (a new failure,
+    a run that never executed, runs that disagree) may be the test's or the sandbox's doing.
+    """
+    base = _failing(base_runs[0])
+    left = [_failing(r) for r in pr_runs]
+    return (bool(left) and all(f == left[0] and base.keys() <= r.results.keys() for f, r in zip(left, pr_runs))
+            and 0 < len(left[0]) < len(base) and left[0].items() <= base.items())

@@ -98,8 +98,20 @@ HEADLINE = {
 LIMIT = 60_000  # GitHub allows 65,535 characters per output field
 
 
-def _fails(runs) -> int:
-    return sum(1 for r in runs if r.get("not_passed")) if isinstance(runs, list) else 0
+_MARKDOWN = re.compile(r"([\\`*_{}\[\]<>()#+\-.!|~])")
+
+
+def _plain(text: str, limit: int) -> str:
+    """Untrusted text (issue, PR, test output, model) as one line of literal text: no links, images or HTML."""
+    return _MARKDOWN.sub(r"\\\1", " ".join(text.split())[:limit])
+
+
+def _runs(runs: list, passing: bool) -> str:
+    """'k of n runs' that passed (or failed). A run where no test ran, a sandbox outage, is neither."""
+    ran = [r for r in runs if r.get("tests")]
+    k = sum(1 for r in ran if (not r.get("not_passed")) == passing)
+    idle = len(runs) - len(ran)
+    return f"{k} of {len(runs)} runs" + (f" ({idle} did not run)" if idle else "")
 
 
 def _fenced(code: str) -> str:
@@ -115,22 +127,28 @@ def check_output(ev: dict, details_url: str) -> dict:
     headline = HEADLINE.get(verdict, verdict)
     lines = [f"**{headline}**", ""]
     if claim := (ev.get("claim") or {}).get("claim"):
-        lines.append(f"Claim: {claim[:1000]}")
+        lines.append(f"Claim: {_plain(claim, 1000)}")
     forks = ev.get("forks") or {}
-    base, pr = forks.get("base_with_test"), forks.get("pr_with_test")
+    base, pr, suite = forks.get("base_with_test"), forks.get("pr_with_test"), forks.get("base_suite")
     if isinstance(base, list) and base:
-        lines.append(f"- Blind test fails on the original code in {_fails(base)} of {len(base)} runs")
+        lines.append(f"- Blind test fails on the original code in {_runs(base, passing=False)}")
     if isinstance(pr, list) and pr:
-        lines.append(f"- Blind test passes with this pull request in {len(pr) - _fails(pr)} of {len(pr)} runs")
+        lines.append(f"- Blind test passes with this pull request in {_runs(pr, passing=True)}")
         still = next((f.get("msg") or "" for r in pr for f in r.get("not_passed", {}).values()), None)
         if still:
-            lines.append(f"- Still failing with the change: {still.splitlines()[0][:500]}")
+            lines.append(f"- Still failing with the change: {_plain(still.splitlines()[0], 500)}")
     elif isinstance(pr, str):
         lines.append("- The pull request's patch did not apply at its base, so it was never run")
+    if verdict == "REGRESSION":
+        lines.append("- Existing tests: the change breaks some that passed before (named in the reason)")
+    elif verdict == "PROVEN":
+        ok = suite[0].get("tests", 0) - len(suite[0].get("not_passed") or {}) if isinstance(suite, list) and suite else 0
+        lines.append(f"- Existing tests: all {ok} that pass on the original code still pass" if ok
+                     else "- Existing tests: none were found to run for this change")
     if (opinion := ev.get("second_opinion")) and opinion.get("about") == "mixed":
-        view = "the failing check matches the issue" if opinion.get("faithful") else "the test may be wrong here"
-        lines.append(f"- Second opinion: {view}: {(opinion.get('reason') or '')[:1000]}")
-    lines += ["", f"Reason: {(ev.get('reason') or '')[:2000]}", "", f"Full receipt: {details_url}"]
+        view = "the change may miss part of the issue" if opinion.get("faithful") else "the test may be wrong here"
+        lines.append(f"- Second opinion: {view}: {_plain(opinion.get('reason') or '', 1000)}")
+    lines += ["", f"Reason: {_plain(ev.get('reason') or '', 2000)}", "", f"Full receipt: {details_url}"]
     code = "\n".join(((ev.get("writer") or {}).get("test_code") or "").splitlines()[:60])
     text = f"### Blind test (written from the issue alone)\n{_fenced(code[:LIMIT])}" if code else ""
     return {"title": headline.split(":")[0], "summary": "\n".join(lines)[:LIMIT], "text": text[:LIMIT]}

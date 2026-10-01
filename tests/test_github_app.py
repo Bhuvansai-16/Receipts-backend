@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
 from types import SimpleNamespace
 
 import httpx
@@ -131,9 +132,45 @@ def test_check_output_explains_a_proven_run():
     assert out["text"].startswith("### Blind test") and out["text"].count("\n") < 70  # first 60 lines only
 
 
+def _shown(markdown: str) -> str:
+    """The text GitHub shows for escaped Markdown."""
+    return re.sub(r"\\(.)", r"\1", markdown)
+
+
 def test_check_output_names_the_case_still_failing():
     out = github_app.check_output(_ev("UNPROVEN", pr_fail=3), "u")
-    assert "Still failing with the change: Expected z**4, got -z**4" in out["summary"]
+    assert "Still failing with the change: Expected z**4, got -z**4" in _shown(out["summary"])
+
+
+def test_runs_that_never_executed_are_not_counted_as_passes():
+    # A sandbox outage leaves runs with no tests: "passes in 3 of 3" would claim what never ran.
+    ev = _ev("UNPROVEN", pr_fail=1)
+    ev["forks"]["pr_with_test"][1:] = [{"tests": 0, "not_passed": {}, "output_tail": ""}] * 2
+    summary = github_app.check_output(ev, "u")["summary"]
+    assert "passes with this pull request in 0 of 3 runs (2 did not run)" in summary
+
+
+def test_untrusted_text_cannot_add_markdown_to_the_check_run():
+    # The claim, failure messages and reasons carry issue and PR text onto a check run in Receipts' name.
+    ev = _ev("UNPROVEN", pr_fail=3, msg="see [docs](https://evil.example) ![x](https://evil.example/p.png)")
+    ev["claim"]["claim"] = "x\n# Proven\n**safe to merge**"
+    ev["reason"] = "<img src=x> `code`"
+    summary = github_app.check_output(ev, "u")["summary"]
+    for raw in ("[docs](", "![x](", "\n# Proven", "**safe", "`code`"):
+        assert raw not in summary
+    assert not re.search(r"(?<!\\)<", summary)  # no HTML: every < is escaped
+    assert "see [docs](https://evil.example)" in _shown(summary) and "x # Proven **safe to merge**" in _shown(summary)
+
+
+def test_check_output_says_what_happened_to_the_existing_tests():
+    ev = _ev("PROVEN")
+    assert "Existing tests: none were found to run for this change" in github_app.check_output(ev, "u")["summary"]
+    ev["forks"]["base_suite"] = [{"tests": 31, "not_passed": {"t.py::s": {"outcome": "skipped"}}, "output_tail": ""}]
+    assert "Existing tests: all 30 that pass on the original code still pass" in \
+        github_app.check_output(ev, "u")["summary"]
+    ev["verdict"] = "REGRESSION"
+    assert "Existing tests: the change breaks some that passed before (named in the reason)" in \
+        github_app.check_output(ev, "u")["summary"]
 
 
 def test_check_output_stays_within_githubs_limits():
@@ -160,5 +197,5 @@ def test_check_output_carries_the_second_opinion_on_a_mixed_result():
     assert "Second opinion: the test may be wrong here: expects an evaluated expression" in \
         github_app.check_output(ev, "u")["summary"]
     ev["second_opinion"] = {"faithful": True, "reason": "the issue asks for it", "about": "mixed"}
-    assert "Second opinion: the failing check matches the issue: the issue asks for it" in \
-        github_app.check_output(ev, "u")["summary"]
+    assert "Second opinion: the change may miss part of the issue: the issue asks for it" in \
+        github_app.check_output(ev, "u")["summary"]  # hedged: the judge was wrong about srepr on sympy #15

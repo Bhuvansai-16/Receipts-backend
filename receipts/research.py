@@ -2,11 +2,12 @@
 
 The writer had Tavily as an optional tool and called it 0 times in 40 runs; this step always runs. Blind like the
 writer: queries come from the issue text alone, code hosts are excluded (by Tavily and again here), and "view
-source" pages are dropped, since a newer docs build can show the fixed code. Any failure gives an empty brief;
-research never fails or stalls a check.
+source" pages are dropped, since a newer docs build can show the fixed code; the writer gets the text without
+links. A failed search is logged and recorded in the brief; research never fails or stalls a check.
 """
 import asyncio
 import builtins
+import logging
 import re
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -26,7 +27,8 @@ SOURCE_VIEWS = ("/_modules/", "/_sources/")  # Sphinx pages that show code, poss
 INDEX_PAGES = ("genindex", "py-modindex", "search.html")  # lists of names, nothing to read
 NOTES_LIMIT = 1200
 SEARCH_TIMEOUT_S = 20
-_BUILTINS = set(dir(builtins))
+_NOT_APIS = set(dir(builtins)) | {"Traceback"}  # "Traceback (most recent call last)" reads like a call
+log = logging.getLogger("uvicorn.error")
 
 
 @dataclass
@@ -34,6 +36,7 @@ class Brief:
     queries: list[str] = field(default_factory=list)
     sources: list[dict] = field(default_factory=list)  # {"title", "url"}
     notes: str = ""
+    errors: list[str] = field(default_factory=list)  # failed searches, so a dead key shows up
 
     def for_writer(self) -> str:
         if not self.notes:
@@ -42,16 +45,27 @@ class Brief:
 
 
 def library_of(repo: str, issue: str) -> str:
-    for name in re.findall(r"(?:^|>>>\s*)\s*(?:from|import)\s+([A-Za-z_]\w*)", issue, re.M):
-        return name
+    """The repo's own library first (an xarray issue imports numpy too), else the issue's first import."""
     name = repo.split("/")[-1].lower()
-    return next((lib for lib in DOCS if lib in name), name)
+    for lib, site in DOCS.items():
+        if lib in name or site.split(".")[0] == name:  # scikit-learn's library is sklearn
+            return lib
+    for imported in re.findall(r"(?:^|>>>\s*)\s*(?:from|import)\s+([A-Za-z_]\w*)", issue, re.M):
+        return imported
+    return name
+
+
+def _code(issue: str) -> str:
+    """The issue's code: fenced blocks, >>> lines and `inline` spans. A prose word before "(" is not an API."""
+    return "\n".join(re.findall(r"```[^\n]*\n(.*?)```", issue, re.S) + re.findall(r"^\s*>>>(.*)$", issue, re.M)
+                     + re.findall(r"`([^`\n]+)`", issue))
 
 
 def api_names(issue: str, library: str) -> list[str]:
-    """Up to two names the issue calls or passes, longest first: the likeliest real APIs."""
-    found = re.findall(r"\b([A-Za-z_]\w*)\s*\(", issue) + re.findall(r"=\s*([A-Za-z_]\w*)\b", issue)
-    names = list(dict.fromkeys(n for n in found if len(n) >= 4 and n not in _BUILTINS and n != library))
+    """Up to two names the issue's code calls or passes, longest first: the likeliest real APIs."""
+    code = _code(issue)
+    found = re.findall(r"\b([A-Za-z_]\w*)\s*\(", code) + re.findall(r"=\s*([A-Za-z_]\w*)\b", code)
+    names = list(dict.fromkeys(n for n in found if len(n) >= 4 and n not in _NOT_APIS and n != library))
     return sorted(names, key=len, reverse=True)[:2]
 
 
@@ -71,21 +85,23 @@ async def research(repo: str, issue: str, search=None) -> Brief:
     if not brief.queries:
         return brief
     notes = []
-    try:
-        if search is None:
-            from langchain_tavily import TavilySearch
+    for query in brief.queries:
+        try:  # no key, no results, quota, timeout: the writer works without this part, as it always did
+            if search is None:
+                from langchain_tavily import TavilySearch
 
-            search = TavilySearch(max_results=3, include_domains=[DOCS[library]] if library in DOCS else DOC_DOMAINS,
-                                  exclude_domains=CODE_HOSTS)
-        for query in brief.queries:
+                search = TavilySearch(max_results=3, exclude_domains=CODE_HOSTS,
+                                      include_domains=[DOCS[library]] if library in DOCS else DOC_DOMAINS)
             found = await asyncio.wait_for(search.ainvoke({"query": query}), SEARCH_TIMEOUT_S)
-            for item in found.get("results", []) if isinstance(found, dict) else []:
-                url = item.get("url") or ""
-                if _allowed(url) and url not in {s["url"] for s in brief.sources}:
-                    title = item.get("title") or url
-                    brief.sources.append({"title": title, "url": url})
-                    notes.append(f"- {title} ({url}): {' '.join(str(item.get('content', '')).split())[:350]}")
-    except Exception:  # no key, network, quota, timeout: the writer works without a brief, as it always did
-        pass
+        except Exception as e:
+            brief.errors.append(f"{query}: {type(e).__name__}: {e}"[:300])
+            log.warning("research search failed: %s", brief.errors[-1])
+            continue
+        for item in found.get("results", []) if isinstance(found, dict) else []:
+            url = item.get("url") or ""
+            if _allowed(url) and url not in {s["url"] for s in brief.sources}:
+                brief.sources.append({"title": item.get("title") or url, "url": url})
+                text = " ".join(str(item.get("content", "")).split())[:350]
+                notes.append(f"- {item.get('title') or 'Docs'}: {text}")  # no link: a docs page can lead to source
     brief.notes = "\n".join(notes)[:NOTES_LIMIT]
     return brief

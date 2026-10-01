@@ -1,4 +1,4 @@
-from receipts.verdict import PytestRun, TestResult, Verdict, fix_verdict, repro_check, restrict, suite_candidates
+from receipts.verdict import PytestRun, TestResult, Verdict, fix_verdict, partial_fix, repro_check, restrict, suite_candidates
 
 T = "receipts_test.py::test_bug"
 
@@ -162,3 +162,26 @@ def test_repro_explains_an_assert_at_module_level():
     msg = 'receipts_test.py:7: in <module>\n    assert result == -z**2\nE   AssertionError: Expected -z**2'
     ok, reason = repro_check(R({"receipts_test.py": ("error", "CollectionError", msg)}))
     assert not ok and "module level" in reason and "def test_" in reason
+
+
+def test_partial_fix_needs_some_but_not_all_base_failures_unchanged_on_every_pr_run():
+    # Only this pattern backs a "the change missed part of it" reading (review, Critical 1).
+    a, b = "receipts_test.py::test_a", "receipts_test.py::test_b"
+    base = R({a: ("failed", "AssertionError", "a"), b: ("failed", "AssertionError", "b")})
+    part = R({a: ("passed",), b: ("failed", "AssertionError", "b")})  # #16: one case fixed, one exactly as before
+    differently = R({a: ("passed",), b: ("failed", "AssertionError", "b, but new")})
+    one_test = R({a: ("failed", "AssertionError", "a")})
+    one_test_differently = R({a: ("failed", "AssertionError", "a, differently")})  # #15
+    assert partial_fix([base] * 3, [part] * 3)
+    assert not partial_fix([base] * 3, [differently] * 3)
+    assert not partial_fix([one_test] * 3, [one_test_differently] * 3)
+    assert not partial_fix([base] * 3, [part, PytestRun(), part])  # a run that never executed (sandbox timeout)
+    assert not partial_fix([base] * 3, [R({a: ("passed",), b: ("passed",)})] * 3)
+    assert not partial_fix([base] * 3, [part, R({a: ("failed", "AssertionError", "a"), b: ("passed",)}), part])  # runs disagree
+    assert not partial_fix([base] * 3, [R({b: ("failed", "AssertionError", "b")})] * 3)  # test_a never ran: not fixed
+
+
+def test_proven_without_existing_tests_does_not_say_they_hold():
+    # No tests found for the changed files means no suite ran; "existing tests hold" would claim what never ran.
+    _, why = fix_verdict([R(FAIL)] * 3, [R(PASS)] * 3, None, None)
+    assert "existing tests hold" not in why and "no existing tests" in why

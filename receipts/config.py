@@ -18,7 +18,7 @@ MODELS = {
     # A/B on five sympy PRs (spec, 2026-09-30): Super wrote a valid test for 4 of 5 with half the tokens;
     # Lightning for 0 of 5. MODEL_TEST_WRITER=nvidia/Nemotron-3_5-Lightning is the cheaper per-token option.
     "writer": os.environ.get("MODEL_TEST_WRITER", "nvidia/nemotron-3-super-120b-a12b"),
-    # the self-recovery writer: set equal to MODEL_TEST_WRITER if the A/B shows no gain
+    # the one automatic retry when no test was accepted; Ultra, probed on #16, wrote no valid test either
     "writer_strong": os.environ.get("MODEL_TEST_WRITER_STRONG", "nvidia/nemotron-3-super-120b-a12b"),
     "scope": os.environ.get("MODEL_SCOPE", "nvidia/nemotron-3-super-120b-a12b"),
     "judge": os.environ.get("MODEL_JUDGE", "nvidia/Nemotron-3-Ultra-550b-a55b"),

@@ -109,10 +109,14 @@ Evidence JSON lands in `runs/`. Traces in LangSmith project `receipts`.
 
 - The test writer never receives the patch, SWE-bench's hidden tests (`test_patch`, `FAIL_TO_PASS`) or hints.
 - It works in its own sandbox copy with `.git` removed; every verdict run forks the untouched base image.
-- The research brief searches only the library's documentation site, from names in the issue text. Code hosts
+- The research brief searches only the library's documentation site, for names in the issue's code. Code hosts
   are excluded by Tavily and dropped again locally, as are Sphinx "view source" pages, which can show newer code.
-- Residual risk: the sandbox has network access. Every shell command the agent ran and every source the brief
-  used is recorded in the evidence JSON (`writer.tool_log`, `research.sources`) so a leak can be audited.
+  The writer gets the pages' text without their links.
+- Residual risks: documentation describes the latest release, which may already include the fix (a changelog line,
+  a "changed in version" note); the writer is told the docs show usage only and the issue decides what is
+  correct. The sandbox has network access. Every shell command the agent ran, and every source and note the brief
+  used, is recorded in the evidence JSON (`writer.tool_log`, `research.sources`, `research.notes`) so a leak can
+  be audited.
 
 ## Models
 
@@ -123,7 +127,7 @@ Evidence JSON lands in `runs/`. Traces in LangSmith project `receipts`.
 | Blind test writing (Deepagents agent in sandbox) | Nemotron 3 Super |
 | One automatic retry when no test was accepted | `MODEL_TEST_WRITER_STRONG` (see below) |
 | Scope check of each submitted test (only what the issue asks) | Nemotron 3 Super |
-| Second opinion before REFUTED | Nemotron 3 Ultra |
+| Second opinion before REFUTED; after-fix review of each test; explanation of a partial fix | Nemotron 3 Ultra |
 
 The writer model was chosen by an A/B on five real pull requests (`scripts/eval_prs.py`): Nemotron 3 Super wrote a
 valid blind test for 4 of 5 with half the tokens; Nemotron 3.5 Lightning for none. Set `MODEL_TEST_WRITER` (first

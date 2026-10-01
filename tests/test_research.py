@@ -72,3 +72,40 @@ def test_only_web_links_become_sources():
                {"title": "ok", "url": "https://docs.sympy.org/latest/modules/core.html", "content": "c"}]
     brief = asyncio.run(research.research("a/sympy", ISSUE_2, FakeSearch(results=hostile)))
     assert [s["url"] for s in brief.sources] == ["https://docs.sympy.org/latest/modules/core.html"]
+
+
+def test_the_repos_own_library_comes_before_the_issues_imports():
+    # pydata/xarray 4629's issue imports numpy first; its brief searched numpy's docs.
+    issue = "```python\nimport numpy as np\nimport xarray as xr\nxr.merge([a, b], combine_attrs='override')\n```"
+    assert research.library_of("pydata/xarray", issue) == "xarray"
+    assert research.library_of("scikit-learn/scikit-learn", "import numpy as np\nfrom sklearn import svm") == "sklearn"
+    assert research.library_of("someone/app", ">>> from sympy import sqrt") == "sympy"  # unknown repo: the import
+
+
+def test_api_names_come_from_the_issues_code_not_its_prose():
+    # sympy #26 searched "sympy returned" ("... returned (x)") and a traceback gives "Traceback (".
+    issue = ("sqrt(x**2) returned (x) instead of Abs(x), see `refine(sqrt(x**2), Q.real(x))`.\n\n"
+             "```\nTraceback (most recent call last):\n  File \"t.py\", line 3, in <module>\n"
+             "    print(simplify(e))\n```")
+    assert research.api_names(issue, "sympy") == ["simplify", "refine"]
+
+
+def test_one_failed_search_keeps_the_others_and_is_recorded():
+    # langchain_tavily raises when a query finds nothing, which cancelled the other query; and a failing
+    # search (an expired key) must show up in the evidence, not quietly turn research off.
+    class FirstFails(FakeSearch):
+        async def ainvoke(self, args):
+            if not self.queries:
+                self.queries.append(args["query"])
+                raise RuntimeError("No search results found")
+            return await super().ainvoke(args)
+
+    brief = asyncio.run(research.research("a/sympy", ISSUE_2, FirstFails()))
+    assert [s["url"] for s in brief.sources] == ["https://docs.sympy.org/2"]
+    assert brief.errors == ["sympy default_sort_key: RuntimeError: No search results found"]
+
+
+def test_the_writer_gets_the_docs_text_without_links():
+    # A docs page links to its source on a code host; the writer gets the text, the receipt lists the links.
+    brief = asyncio.run(research.research("a/sympy", ISSUE_2, FakeSearch()))
+    assert "default_sort_key(item" in brief.for_writer() and "http" not in brief.for_writer()
