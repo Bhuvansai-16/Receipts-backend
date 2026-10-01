@@ -314,3 +314,19 @@ def test_the_first_writers_evidence_survives_a_failed_retry(monkeypatch):
     ev = asyncio.run(engine.check(INST, PATCH))
     assert ev["verdict"] == "UNPROVEN" and "TimeoutError" in ev["reason"]
     assert ev["writer_first"] == {"attempts": 2, "reason": "writer gave up", "submissions": [], "tool_log": ["cat a.py"]}
+
+
+def test_a_provider_outage_gets_no_retry_and_says_so(monkeypatch):
+    # The model client already retried 3 times: a second writer on the same provider only burns tokens, and
+    # "no valid reproducing test" would blame the writer for an outage.
+    calls = []
+
+    async def write_test(issue, img, emit=None, **kw):
+        calls.append(kw)
+        return SimpleNamespace(test_code=None, attempts=0, reason="agent stopped: APIConnectionError: down", log=[],
+                               submissions=[], provider_error="APIConnectionError: down")
+
+    monkeypatch.setattr(engine, "write_test", write_test)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert len(calls) == 1 and "writer_first" not in ev
+    assert ev["verdict"] == "UNPROVEN" and ev["reason"] == "the test writer's model was unavailable: APIConnectionError: down"

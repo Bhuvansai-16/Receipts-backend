@@ -96,6 +96,7 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
         monkeypatch.setattr(writer, name, fn)
     out = asyncio.run(writer.write_test("issue", object()))
     assert out.test_code == "def test_bug(): assert 1 == 2" and out.attempts == 1 and Backend.closed
+    assert out.provider_error == ""  # a spent budget is the writer's failure, not the provider's
 
 
 def test_keep_tests_drops_tests_that_passed_on_base():
@@ -455,3 +456,41 @@ def test_prompt_builds_expected_values_from_the_issues_code():
     # sympy #15, twice: the issue's expected Mul(-1, Add(x, 2, evaluate=False), evaluate=False) was retyped as an
     # srepr string with evaluate=False in it, which srepr never prints, so no correct fix could pass the test.
     assert "build it in the test from that same code" in " ".join(writer.PROMPT.split())
+
+
+def test_a_provider_error_is_recorded_and_no_leftover_file_is_judged(monkeypatch):
+    # The gates call the same provider; judging the leftover file during an outage would only fail again.
+    import httpx
+    import openai
+
+    class Agent:
+        async def ainvoke(self, *a, **k):
+            raise openai.APIConnectionError(request=httpx.Request("POST", "https://tokenfactory.example/v1"))
+
+    ran = []
+
+    class Backend:
+        async def adownload_files(self, paths):
+            return [SimpleNamespace(error=None, content=b"def test_bug(): assert 1 == 2")]
+
+    async def backend(image, log):
+        return Backend()
+
+    async def blind(image):
+        return image
+
+    async def run_pytest(image, args, files):
+        ran.append(args)
+        return PytestRun({"receipts_test.py::test_bug": TestResult("failed", "AssertionError", "assert 1 == 2")})
+
+    async def stated_cases(issue):
+        return []
+
+    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
+    monkeypatch.setattr(writer.config, "llm", lambda role: None)
+    for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
+                     ("stated_cases", stated_cases)]:
+        monkeypatch.setattr(writer, name, fn)
+    out = asyncio.run(writer.write_test("issue", object()))
+    assert out.test_code is None and out.attempts == 0 and not ran
+    assert out.provider_error.startswith("APIConnectionError")

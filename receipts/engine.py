@@ -186,7 +186,9 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     ev["research"] = {"queries": brief.queries, "sources": brief.sources, "notes": brief.notes, "errors": brief.errors}
     say("research", {"sources": len(brief.sources)})
     w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer())
-    if w.test_code is None:  # the writer failed, not the PR, and no fork has run yet: one retry, never more
+    # The writer failed, not the PR, and no fork has run yet: one retry, never more. Not when the model provider
+    # failed: its client already retried, and the same provider would only fail again.
+    if w.test_code is None and not getattr(w, "provider_error", ""):
         say("writer_retry", {"model": config.MODELS["writer_strong"], "why": w.reason[:300]})
         ev["writer_first"] = {"attempts": w.attempts, "reason": w.reason,
                               "submissions": getattr(w, "submissions", []), "tool_log": w.log}
@@ -195,6 +197,8 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
                     "submissions": getattr(w, "submissions", [])}
+    if w.test_code is None and getattr(w, "provider_error", ""):
+        return Verdict.UNPROVEN, f"the test writer's model was unavailable: {w.provider_error}"
     if w.test_code is None:
         return Verdict.UNPROVEN, f"no valid reproducing test after {w.attempts} attempt(s): {w.reason}"
     say("test_accepted", {"attempts": w.attempts})

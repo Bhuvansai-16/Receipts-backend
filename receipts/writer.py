@@ -7,6 +7,7 @@ import ast
 import json
 from dataclasses import dataclass, field
 
+import openai
 from contree_sdk.langchain.sandbox import ContreeSandbox
 from deepagents import create_deep_agent
 from deepagents.backends.protocol import ExecuteResponse
@@ -262,6 +263,7 @@ class WriterResult:
     log: list[dict] = field(default_factory=list)
     scope: str = ""  # what the scope check pruned and why
     submissions: list[dict] = field(default_factory=list)  # every counted attempt: its file and verdict
+    provider_error: str = ""  # set when the model provider failed, so the engine doesn't blame or retry the writer
 
 
 def retry_history(first: WriterResult) -> str:
@@ -375,11 +377,15 @@ async def write_test(issue: str, base_image, emit=None, *, brief: str = "", hist
                             config={"recursion_limit": 150, "run_name": "blind_test_writer"})
     except WriterDone:
         pass
-    except Exception as e:  # command budget / recursion limit / model error
+    except openai.APIError as e:  # the provider failed after its client's own retries: not the writer's doing
+        out.provider_error = f"{type(e).__name__}: {e}"[:300]
+        stopped = f"agent stopped: {out.provider_error}"
+    except Exception as e:  # command budget / recursion limit
         stopped = f"agent stopped: {type(e).__name__}: {e}"[:500]
     try:
-        if out.test_code is None and out.attempts < config.MAX_TEST_ATTEMPTS:
-            await submit()  # judge whatever test file the agent left behind
+        # judge whatever test file the agent left behind; not during an outage, since the gates call the same provider
+        if out.test_code is None and out.attempts < config.MAX_TEST_ATTEMPTS and not out.provider_error:
+            await submit()
     finally:
         if hasattr(backend, "aclose"):
             await backend.aclose()
