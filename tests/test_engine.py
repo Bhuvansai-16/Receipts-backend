@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from receipts import engine, research, swebench
+from receipts import engine, research, swebench, verdict
 from receipts.sandbox import MARKER, TEST_ARGS
 from receipts.swebench import Instance
 
@@ -50,7 +50,11 @@ def fakes(monkeypatch):
     async def judge(*a):
         return engine.Judgement(faithful=True, reason="matches issue")
 
-    for name, fn in [("classify", classify), ("write_test", write_test), ("judge", judge)]:
+    async def judge_mixed(*a):
+        raise AssertionError("only a mixed result asks for this opinion")
+
+    for name, fn in [("classify", classify), ("write_test", write_test), ("judge", judge),
+                     ("judge_mixed", judge_mixed)]:
         monkeypatch.setattr(engine, name, fn)
     monkeypatch.setattr(swebench, "base_image", base_image)  # Instance.base_image() goes through it
     monkeypatch.setattr(engine.research, "research", no_research)
@@ -217,3 +221,51 @@ def test_only_one_retry(monkeypatch):
     calls = _writer_sequence(monkeypatch, [None, None])
     ev = asyncio.run(engine.check(INST, PATCH))
     assert len(calls) == 2 and ev["verdict"] == "UNPROVEN" and "no valid reproducing test" in ev["reason"]
+
+
+class MixedImg(Img):
+    """Base fails both tests; with the PR one passes and the other fails differently (a mixed result)."""
+
+    async def run(self, shell=None, files=None, **kw):
+        if "/tmp/pr.diff" in (files or {}):
+            return MixedImg("pr")
+        args = json.loads(files["/tmp/receipts_args.json"])
+        if args != TEST_ARGS:
+            return await super().run(shell, files, **kw)
+        fail = lambda msg: {"outcome": "failed", "exc": "AssertionError", "msg": msg}  # noqa: E731
+        res = {"receipts_test.py::test_a": PASSED if self.name == "pr" else fail("a is wrong"),
+               "receipts_test.py::test_b": fail("expr1=-(x + 2), expected=-x - 2" if self.name == "pr" else "b")}
+        return SimpleNamespace(stdout=MARKER + json.dumps(res), stderr="", exit_code=0)
+
+
+def test_a_mixed_result_gets_a_second_opinion_that_never_changes_the_verdict(monkeypatch):
+    # sympy #16: the retry's test expected an evaluated -x - 2 where the issue asks for -(x + 2) unevaluated;
+    # without an opinion the page said "the pull request fixed part of it", blaming the PR on a guess.
+    asked = []
+
+    async def base_image(iid):
+        return MixedImg("base")
+
+    async def judge_mixed(issue, test_code, pr_output):
+        asked.append(pr_output)
+        return engine.Judgement(faithful=False, reason="expects an evaluated expression")
+
+    monkeypatch.setattr(swebench, "base_image", base_image)
+    monkeypatch.setattr(engine, "judge_mixed", judge_mixed)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "UNPROVEN" and ev["reason"] == verdict.MIXED
+    assert ev["second_opinion"] == {"faithful": False, "reason": "expects an evaluated expression", "about": "mixed"}
+    assert "second_opinion" in [e["type"] for e in ev["events"]] and len(asked) == 1
+
+
+def test_a_failed_opinion_never_breaks_a_mixed_result(monkeypatch):
+    async def base_image(iid):
+        return MixedImg("base")
+
+    async def judge_mixed(*a):
+        raise TimeoutError("model unavailable")
+
+    monkeypatch.setattr(swebench, "base_image", base_image)
+    monkeypatch.setattr(engine, "judge_mixed", judge_mixed)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "UNPROVEN" and ev["reason"] == verdict.MIXED and "second_opinion" not in ev

@@ -127,6 +127,9 @@ def check_output(ev: dict, details_url: str) -> dict:
             lines.append(f"- Still failing with the change: {still.splitlines()[0][:500]}")
     elif isinstance(pr, str):
         lines.append("- The pull request's patch did not apply at its base, so it was never run")
+    if (opinion := ev.get("second_opinion")) and opinion.get("about") == "mixed":
+        view = "the failing check matches the issue" if opinion.get("faithful") else "the test may be wrong here"
+        lines.append(f"- Second opinion: {view}: {(opinion.get('reason') or '')[:1000]}")
     lines += ["", f"Reason: {(ev.get('reason') or '')[:2000]}", "", f"Full receipt: {details_url}"]
     code = "\n".join(((ev.get("writer") or {}).get("test_code") or "").splitlines()[:60])
     text = f"### Blind test (written from the issue alone)\n{_fenced(code[:LIMIT])}" if code else ""

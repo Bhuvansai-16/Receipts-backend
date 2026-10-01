@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from . import config, research
 from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
 from .swebench import Instance
-from .verdict import PytestRun, Verdict, fix_verdict, restrict, suite_candidates
+from .verdict import MIXED, PytestRun, Verdict, fix_verdict, restrict, suite_candidates
 from .writer import retry_history, write_test
 
 
@@ -68,6 +68,24 @@ async def judge(issue: str, test_code: str, base_output: str) -> Judgement:
         "issue asks for, with no extra or stricter expectations and no mistakes of its own. If in doubt, false.\n\n"
         f"Issue:\n{issue[:8000]}\n\nTest:\n```python\n{test_code}\n```\n\n"
         f"Failure on unpatched code:\n{base_output[-3000:]}"
+    )
+    return await config.llm("judge").with_structured_output(Judgement, method="function_calling").ainvoke(prompt)
+
+
+@traceable(name="second_opinion_mixed")
+async def judge_mixed(issue: str, test_code: str, pr_output: str) -> Judgement:
+    """Explains a mixed result; never changes it. Is the check still failing with the PR one the issue asks for
+    (the change misses part of it), or is the test wrong (sympy #16: it expected an evaluated -x - 2 where the
+    issue asks for an unevaluated -(x + 2))? If in doubt the test is doubted: nothing is said against the PR."""
+    prompt = (
+        "A pull request claims to fix the issue below. A test written from the issue alone fails on the unpatched "
+        "code. With the pull request applied, part of the test passes but the failure below remains. Answer "
+        "faithful=true ONLY if the failing assertion checks exactly what the issue asks for, so the change misses "
+        "part of the issue. Answer faithful=false if the assertion itself is wrong: an expected value the issue "
+        "doesn't ask for, built differently from the issue's expectation, or a mistake in the test. If in doubt, "
+        "false. Say in reason which assertion and why, in one or two sentences.\n\n"
+        f"Issue:\n{issue[:8000]}\n\nTest:\n```python\n{test_code}\n```\n\n"
+        f"Failure with the pull request:\n{pr_output[-3000:]}"
     )
     return await config.llm("judge").with_structured_output(Judgement, method="function_calling").ainvoke(prompt)
 
@@ -225,4 +243,12 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say) -> tuple[V
         say("second_opinion", ev["second_opinion"])
         if not j.faithful:
             return Verdict.UNPROVEN, f"second opinion doubts the test: {j.reason}"
+    elif reason == MIXED and pr_runs:  # an explanation for the reader; the verdict stays Unproven either way
+        failing = next((r for r in pr_runs if any(t.outcome != "passed" for t in r.results.values())), pr_runs[0])
+        try:
+            j = await judge_mixed(inst.problem_statement, w.test_code, failing.output)
+        except Exception:  # only an explanation: without it the page uses neutral words
+            return v, reason
+        ev["second_opinion"] = {**j.model_dump(), "about": "mixed"}
+        say("second_opinion", ev["second_opinion"])
     return v, reason

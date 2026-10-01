@@ -152,3 +152,13 @@ def test_a_test_with_backticks_cannot_break_out_of_its_code_block():
 def test_check_output_without_forks_still_says_what_happened():
     out = github_app.check_output({"verdict": "NO_CHECKABLE_CLAIM", "reason": "classified as 'none'"}, "u")
     assert out["title"].startswith("No checkable claim") and out["text"] == "" and "classified" in out["summary"]
+
+
+def test_check_output_carries_the_second_opinion_on_a_mixed_result():
+    ev = _ev("UNPROVEN", pr_fail=3)
+    ev["second_opinion"] = {"faithful": False, "reason": "expects an evaluated expression", "about": "mixed"}
+    assert "Second opinion: the test may be wrong here: expects an evaluated expression" in \
+        github_app.check_output(ev, "u")["summary"]
+    ev["second_opinion"] = {"faithful": True, "reason": "the issue asks for it", "about": "mixed"}
+    assert "Second opinion: the failing check matches the issue: the issue asks for it" in \
+        github_app.check_output(ev, "u")["summary"]

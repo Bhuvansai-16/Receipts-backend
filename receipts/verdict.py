@@ -18,6 +18,9 @@ class PytestRun:
     output: str = ""  # tail of console output, for evidence
 
 
+MIXED = "PR runs are mixed or fail differently from base"
+
+
 class Verdict(str, Enum):
     PROVEN = "PROVEN"
     REFUTED = "REFUTED"
@@ -115,4 +118,4 @@ def fix_verdict(
     base_sig = _failing(base_runs[0])
     if all(_failing(r) == base_sig for r in pr_runs):
         return Verdict.REFUTED, "test still fails on the PR with the same assertion as on base"
-    return Verdict.UNPROVEN, "PR runs are mixed or fail differently from base"
+    return Verdict.UNPROVEN, MIXED
