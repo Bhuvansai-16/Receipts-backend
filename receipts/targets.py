@@ -70,8 +70,6 @@ class RepoTarget:
     async def base_image(self):
         """The repo installed at base_sha. Downloads here, not in pr_target: the engine builds this while it
         classifies the claim, and a cached environment needs no download at all."""
-        if config.SANDBOX_PROVIDER != "contree":
-            raise EnvironmentSetupError("real repositories need SANDBOX_PROVIDER=contree (Nebius sandboxes)")
         key = (self.repo, self.base_sha)
         if key not in _envs:  # ponytail: per-process cache; a restart rebuilds it
             tarball = await self.fetch()

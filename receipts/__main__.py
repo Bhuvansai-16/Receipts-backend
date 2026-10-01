@@ -15,10 +15,8 @@ async def smoke(instance_id: str | None) -> None:
 
     from .sandbox import ACTIVATE, TEST_ARGS, TEST_PATH, run_pytest, text
 
-    print(f"sandbox provider: {config.SANDBOX_PROVIDER}")
-    if config.SANDBOX_PROVIDER == "contree":
-        r = await (await config.contree().images.use("busybox:latest")).run(shell="echo sandbox-ok")
-        print(f"sandbox: exit={r.exit_code} {text(r.stdout).strip()}")
+    r = await (await config.contree().images.use("busybox:latest")).run(shell="echo sandbox-ok")
+    print(f"sandbox: exit={r.exit_code} {text(r.stdout).strip()}")
     if not instance_id:
         return
 
@@ -30,17 +28,6 @@ async def smoke(instance_id: str | None) -> None:
     print(f"swe image {instance_id}: exit={r.exit_code}\n{text(r.stdout)}{text(r.stderr)}")
     run = await run_pytest(img, TEST_ARGS, {TEST_PATH: b"def test_probe():\n    assert 1 == 2\n"})
     print(f"probe (expect failed/AssertionError): {run.results or run.output}")
-
-
-async def _closing(coro):
-    """Run `coro`, then close the Daytona HTTP session (otherwise aiohttp warns at exit)."""
-    try:
-        return await coro
-    finally:
-        if config.SANDBOX_PROVIDER == "daytona":
-            from .daytona_backend import client
-
-            await client().close()
 
 
 def _run_async(coro):
@@ -80,7 +67,7 @@ def main() -> None:
     sub.add_parser("import-runs", help="load runs/*.json into the database as public example receipts")
     a = ap.parse_args()
     if a.cmd == "smoke":
-        return asyncio.run(_closing(smoke(a.instance)))
+        return asyncio.run(smoke(a.instance))
     if a.cmd in ("migrate", "import-runs"):
         if not config.DATABASE_URL:
             sys.exit("error: set DATABASE_URL (and DATABASE_URL_UNPOOLED) in .env first")
@@ -105,7 +92,7 @@ def main() -> None:
     except ValueError as e:
         sys.exit(f"error: {e}")
     patch, label = load_patch(a.patch, inst.gold_patch)
-    ev = asyncio.run(_closing(check(inst, patch)))
+    ev = asyncio.run(check(inst, patch))
     ev["pr"] = a.patch if a.patch in ("gold", "none") else "diff"
     out = save_evidence(ev, new_run_id(inst.instance_id, label))
     tokens = sum(u.get("total_tokens", 0) for u in (ev.get("tokens") or {}).values())

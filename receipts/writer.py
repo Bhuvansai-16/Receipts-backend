@@ -240,9 +240,7 @@ def keep_tests(code: str, nodeids: list[str]) -> str:
 
 
 async def agent_backend(image, log: list):
-    """Deepagents backend on a live sandbox in `image`'s state (Daytona images bring their own)."""
-    if hasattr(image, "agent_backend"):
-        return await image.agent_backend(log)
+    """Deepagents backend on a live sandbox in `image`'s state."""
     return SafeSandbox(image.session(), log)
 
 

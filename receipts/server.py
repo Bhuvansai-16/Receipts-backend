@@ -43,10 +43,6 @@ async def lifespan(app: FastAPI):
     await auth.close()
     if pool:
         await pool.close()
-    if config.SANDBOX_PROVIDER == "daytona":
-        from .daytona_backend import client
-
-        await client().close()
 
 
 app = FastAPI(title="Receipts API", lifespan=lifespan)

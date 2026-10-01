@@ -77,7 +77,6 @@ def test_base_image_downloads_the_repo_once_and_picks_the_suite(monkeypatch):
         async def oci(self, ref):
             return Image()
 
-    monkeypatch.setattr(targets.config, "SANDBOX_PROVIDER", "contree")
     monkeypatch.setattr(targets.config, "contree", lambda: SimpleNamespace(images=Images()))
     monkeypatch.setattr(targets, "_envs", {})
     first = targets.RepoTarget("octo/hello#1", "octo/hello", "claim", "sha", ["pkg/calc.py"], fetch)

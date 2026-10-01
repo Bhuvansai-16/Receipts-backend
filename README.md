@@ -70,20 +70,13 @@ Local webhooks: GitHub can't reach `localhost`, so forward a smee.io channel to 
 npx smee-client --url https://smee.io/<your-channel> --target http://localhost:8000/api/github/webhook
 ```
 
-Checks on real repositories need `SANDBOX_PROVIDER=contree` (Nebius sandboxes) and Python projects tested with
+Checks run in Nebius Token Factory Sandboxes and need Python projects tested with
 pytest. The API only trusts installations that GitHub lists for the signed-in user, verifies every webhook
 signature, and gives each GitHub call a token limited to one repository; no token enters a sandbox.
 
 Limits keep a public app affordable: each user gets `MAX_ACTIVE_RUNS` checks at a time and `RUNS_PER_DAY` in 24
 hours, everyone together gets `GLOBAL_RUNS_PER_DAY`, and `ALLOWED_GITHUB_ACCOUNTS` (when set) limits webhook
 auto-checks to those GitHub accounts.
-
-## Sandbox provider
-
-`SANDBOX_PROVIDER=contree` (default) runs on Nebius Token Factory Sandboxes, which the submission uses.
-`SANDBOX_PROVIDER=daytona` is a stopgap while Sandboxes beta access is pending. It builds one Daytona snapshot
-per SWE-bench instance on first use; each run starts a fresh sandbox from it and replays recorded steps
-(patch apply, `.git` removal) in place of Contree's fork.
 
 ## Run
 

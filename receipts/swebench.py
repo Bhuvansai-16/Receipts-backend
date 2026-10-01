@@ -1,6 +1,5 @@
 """SWE-bench Verified instances. Never exposes test_patch, FAIL_TO_PASS or hints (hidden ground truth)."""
 import json
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -60,10 +59,5 @@ def docker_ref(instance_id: str) -> str:
 
 
 async def base_image(instance_id: str):
-    """Clean base checkpoint for the instance on the configured sandbox provider."""
-    ref = docker_ref(instance_id)
-    if config.SANDBOX_PROVIDER == "daytona":
-        from . import daytona_backend
-
-        return await daytona_backend.base_image(ref, "receipts-" + re.sub(r"[^a-z0-9]+", "-", instance_id.lower()))
-    return await config.contree().images.oci(f"docker://docker.io/{ref}")  # reuses the preloaded env
+    """Clean base checkpoint for the instance in Nebius Sandboxes."""
+    return await config.contree().images.oci(f"docker://docker.io/{docker_ref(instance_id)}")  # reuses the preloaded env

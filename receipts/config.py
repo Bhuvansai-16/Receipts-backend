@@ -23,7 +23,6 @@ MODELS = {
     "scope": os.environ.get("MODEL_SCOPE", "nvidia/nemotron-3-super-120b-a12b"),
     "judge": os.environ.get("MODEL_JUDGE", "nvidia/Nemotron-3-Ultra-550b-a55b"),
 }
-SANDBOX_PROVIDER = os.environ.get("SANDBOX_PROVIDER", "contree").lower()  # contree | daytona (stopgap)
 SANDBOX_TIMEOUT_S = int(os.environ.get("SANDBOX_TIMEOUT_S", "900"))
 SANDBOX_MAX_CONCURRENCY = int(os.environ.get("SANDBOX_MAX_CONCURRENCY", "20"))
 MAX_TEST_ATTEMPTS = int(os.environ.get("MAX_TEST_ATTEMPTS", "5"))
