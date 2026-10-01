@@ -80,8 +80,8 @@ wins: `ON CONFLICT DO NOTHING`) and `forget_blind_test(key)`.
 before `test_accepted {"attempts": 0, "reused_from": <run id>}`.
 
 **Receipt (frontend).** The blind test line reads "reused" with the note "written from the issue alone in an
-earlier check" and a link to that receipt; the evidence section says the same above the test code; the run page's
-progress step reads "reused from an earlier check".
+earlier check"; the evidence section says the same above the test code, with a link to the earlier receipt
+("See how it was written"); the run page's progress step reads "reused from an earlier check".
 
 **Concurrency.** Two checks of the same issue at once both miss and both write; the first save wins.
 
