@@ -79,6 +79,7 @@ class MemoryRuns:
         self.installations: dict[int, dict] = {}
         self.installation_users: list[tuple[int, str]] = []  # in link order: the first is the owner
         self.repo_settings: dict[int, dict] = {}
+        self.blind_tests: dict[str, dict] = {}
 
     async def create(self, run_id, user_id, instance_id, pr, started_at=None, source=None):
         self.rows[run_id] = {**dict.fromkeys(SUMMARY_KEYS), "id": run_id, "user_id": user_id,
@@ -156,6 +157,16 @@ class MemoryRuns:
 
     async def import_run(self, run_id, evidence):
         self.rows.setdefault(run_id, _imported(run_id, evidence))
+
+    async def get_blind_test(self, key):
+        hit = self.blind_tests.get(key)
+        return dict(hit) if hit else None
+
+    async def save_blind_test(self, key, repo, run_id, test_code):
+        self.blind_tests.setdefault(key, {"repo": repo, "run_id": run_id, "test_code": test_code})
+
+    async def forget_blind_test(self, key):
+        self.blind_tests.pop(key, None)
 
 
 class PgRuns:
@@ -284,6 +295,16 @@ class PgRuns:
         r = _imported(run_id, jsonb_safe(evidence))
         await self._exec(f"INSERT INTO runs ({SUMMARY}, evidence) VALUES ({', '.join(['%s'] * (len(SUMMARY_KEYS) + 1))}) "
                          "ON CONFLICT (id) DO NOTHING", (*(r[k] for k in SUMMARY_KEYS), Jsonb(r["evidence"])))
+
+    async def get_blind_test(self, key):
+        return await self._one("SELECT run_id, test_code FROM blind_tests WHERE key = %s", (key,))
+
+    async def save_blind_test(self, key, repo, run_id, test_code):
+        await self._exec("INSERT INTO blind_tests (key, repo, run_id, test_code) VALUES (%s, %s, %s, %s) "
+                         "ON CONFLICT (key) DO NOTHING", (key, repo, run_id, jsonb_safe(test_code)))
+
+    async def forget_blind_test(self, key):
+        await self._exec("DELETE FROM blind_tests WHERE key = %s", (key,))
 
 
 async def open_pool(url: str) -> AsyncConnectionPool:

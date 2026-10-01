@@ -30,7 +30,7 @@ async def _neon_store(url: str) -> db.PgRuns:
     await db.migrate(url)
     pool = await db.open_pool(url)
     async with pool.connection() as conn:
-        await conn.execute("TRUNCATE runs")
+        await conn.execute("TRUNCATE runs, blind_tests")
     return db.PgRuns(pool)
 
 
@@ -225,3 +225,15 @@ def test_import_runs_skips_eval_output(tmp_path):
     store = db.MemoryRuns()
     assert asyncio.run(db.import_runs(store, tmp_path)) == 1
     assert list(store.rows) == ["a-gold-20260101-000000"]
+
+
+def test_blind_tests_keep_the_first_save_and_can_be_forgotten(store, run):
+    async def go():
+        assert await store.get_blind_test("k") is None
+        await store.save_blind_test("k", "psf/requests", "r1", "def test_a(): assert 0")
+        await store.save_blind_test("k", "psf/requests", "r2", "def test_b(): assert 0")  # a racing check
+        first = await store.get_blind_test("k")
+        await store.forget_blind_test("k")
+        return first, await store.get_blind_test("k")
+    first, gone = run(go())
+    assert (first["run_id"], first["test_code"]) == ("r1", "def test_a(): assert 0") and gone is None

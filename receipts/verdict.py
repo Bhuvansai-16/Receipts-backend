@@ -66,6 +66,12 @@ def repro_check(run: PytestRun) -> tuple[bool, str]:
     return True, "fails on unpatched code with AssertionError"
 
 
+def reproduces(base_runs: list[PytestRun]) -> bool:
+    """Every base run fails with an assertion, all the same way: a blind test worth reusing."""
+    return (bool(base_runs) and all(repro_check(r)[0] for r in base_runs)
+            and len({frozenset(_failing(r)) for r in base_runs}) == 1)
+
+
 def _passed(run: PytestRun, nodeid: str) -> bool:
     return run.results.get(nodeid, TestResult("missing")).outcome == "passed"
 

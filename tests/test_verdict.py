@@ -1,4 +1,4 @@
-from receipts.verdict import PytestRun, TestResult, Verdict, fix_verdict, partial_fix, repro_check, restrict, suite_candidates
+from receipts.verdict import PytestRun, TestResult, Verdict, fix_verdict, partial_fix, repro_check, reproduces, restrict, suite_candidates
 
 T = "receipts_test.py::test_bug"
 
@@ -191,3 +191,11 @@ def test_a_pr_run_that_never_executed_is_not_called_mixed():
     # A sandbox outage is not "fails differently with the change": nothing ran.
     v, why = fix_verdict([R(FAIL)] * 3, [R(PASS), PytestRun(), R(PASS)], None, None)
     assert v is Verdict.UNPROVEN and "did not run on the PR in 1/3 runs" in why
+
+
+def test_reproduces_needs_every_base_run_to_fail_the_same_way():
+    fail = lambda test: PytestRun({test: TestResult("failed", "AssertionError", "1 != 2")})  # noqa: E731
+    assert reproduces([fail("t::a")] * 3)
+    assert not reproduces([fail("t::a"), fail("t::a"), PytestRun()])  # a run that never ran
+    assert not reproduces([fail("t::a"), fail("t::b"), fail("t::a")])  # flaky: different tests fail
+    assert not reproduces([])
