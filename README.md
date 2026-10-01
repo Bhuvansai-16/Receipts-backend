@@ -70,13 +70,53 @@ Local webhooks: GitHub can't reach `localhost`, so forward a smee.io channel to 
 npx smee-client --url https://smee.io/<your-channel> --target http://localhost:8000/api/github/webhook
 ```
 
-Checks run in Nebius Token Factory Sandboxes and need Python projects tested with
-pytest. The API only trusts installations that GitHub lists for the signed-in user, verifies every webhook
-signature, and gives each GitHub call a token limited to one repository; no token enters a sandbox.
+Checks run in Nebius Token Factory Sandboxes and need Python projects tested with pytest. The API only trusts
+installations that GitHub lists for the signed-in user, verifies every webhook signature, and gives each GitHub
+call a token limited to one repository; no token enters a sandbox.
 
 Limits keep a public app affordable: each user gets `MAX_ACTIVE_RUNS` checks at a time and `RUNS_PER_DAY` in 24
 hours, everyone together gets `GLOBAL_RUNS_PER_DAY`, and `ALLOWED_GITHUB_ACCOUNTS` (when set) limits webhook
 auto-checks to those GitHub accounts.
+
+## Demo without sign-in
+
+`/demo` in the UI runs hand-picked checks for anyone, no account needed: the real fix, an empty patch and a
+plausible wrong patch for two SWE-bench issues (`receipts/demo_cases.json`, wrong patches in
+`receipts/demo_patches/`). Every demo check is a real check with the same pipeline and verdict rules.
+
+- `GET /api/demo`: the cases (never the patch text), the demo check running now, finished demo receipts, and
+  how many demo checks are left today.
+- `POST /api/demo/runs {"case": "<id>"}`: starts a case, or joins the demo check already running (one at a
+  time). Capped by `DEMO_RUNS_PER_DAY` (default 20) and `GLOBAL_RUNS_PER_DAY`.
+
+## Deploy: Cloud Run (API) and Vercel (UI)
+
+The UI runs on Vercel and forwards `/api/*` to this API on Google Cloud Run (`vercel.json` in
+`receipts-frontend`), so the browser sees one origin and sign-in cookies stay first-party on the free
+`*.vercel.app` and `*.run.app` hostnames. Live events and GitHub webhooks go to Cloud Run directly, because
+Vercel ends proxied requests after 120 seconds.
+
+```bash
+gcloud auth login
+gcloud config set project <PROJECT_ID>
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+python scripts/cloudrun_secrets.py      # .env + the GitHub App key -> Secret Manager; prints --set-secrets
+gcloud run deploy receipts-api --source . --region us-east5 --allow-unauthenticated \
+  --min-instances 1 --max-instances 1 --no-cpu-throttling --cpu 1 --memory 1Gi \
+  --timeout 3600 --concurrency 250 \
+  --set-secrets "<printed by the script>" \
+  --set-env-vars "FRONTEND_URL=https://<your-project>.vercel.app"
+```
+
+Why these settings: live runs, the event stream and caches live in one process (one instance, min and max), a
+check keeps running after the request that started it returns (CPU always allocated), and live streams stay
+open for up to an hour (timeout). The heavy work runs in Nebius sandboxes and Token Factory, so one vCPU is
+enough. The image (`Dockerfile`) bakes in the SWE-bench Verified cache, and `.gcloudignore` keeps `.env`,
+the GitHub App key and local runs out of the upload. `us-east5` is next to Neon's `us-east-2`.
+
+After the first deploy: put the Cloud Run URL in the UI's `vercel.json`, set Neon Auth's trusted domain to the
+Vercel URL, and point the GitHub App's Setup URL at `https://<your-project>.vercel.app/api/github/setup` and its
+webhook at `https://<cloud-run-url>/api/github/webhook`.
 
 ## Run
 
