@@ -132,3 +132,41 @@ Decisions:
 - Ultra as writer, probed once on #16 (where Super failed): Ultra wrote no valid test either; the self-recovery
   retry on Super, given Ultra's failure, wrote one first time. The retry's value is the history and a fresh
   attempt, not a bigger model, so `MODEL_TEST_WRITER_STRONG` stays Super ($0.30 vs Ultra's $1.00 per 1M input).
+
+### After the final review's fixes (2026-10-01)
+
+The whole-branch review found one Critical issue: the mixed-result second opinion could blame a pull request on a
+guess. Live #15 showed it: the judge backed a test that can never pass. Re-runs after the fixes
+(`scripts/eval_prs.py --label fixed`, `python -m receipts run`):
+
+| Check | Before | After |
+|---|---|---|
+| sympy #16 | Unproven, mixed. The opinion was right, but the page stated "fixed part of it" as fact. 214 s, 143K tokens | Unproven, mixed. The runs show a partial fix: sums pass with the PR, products fail exactly as on base. The opinion is right again ("did not fix the multiplication case"), and the page hedges it ("may miss part of the issue"). 251 s, 184K tokens |
+| sympy #15 | Unproven, mixed. The opinion backed a test that can never pass, so the PR would have been blamed. 264 s, 230K tokens | Unproven, mixed, and no opinion was asked: the test fails differently, with no partial fix in the runs. Neutral words. 155 s, 92K tokens |
+| xarray 4629, gold patch | Proven, 316 s, 296K tokens (2026-09-28, before research) | Proven, 119 s, 52K tokens. Research queried `xarray Dataset` and `xarray merge` |
+
+Research queries, old code against new, on the SWE-bench issues we run (no searches needed to compare):
+
+- scikit-learn 13328: the old code searched numpy's docs, because the issue imports numpy first. The new code
+  searches sklearn's docs.
+- xarray 4629: the old code queried `show_versions`, from the issue template's prose. The new code queries
+  `merge`, the API at fault.
+- pylint 6903: the new code no longer finds `_query_cpu`, which appears only as a link's text. Private names
+  rarely have docs pages, so this was accepted.
+- seaborn 3187: unchanged. requests 1142: no code in the issue, so no search, as before.
+
+The #15 re-run still had a wrong test, the same way as both earlier runs. The issue's expected
+`Mul(-1, Add(x, 2, evaluate=False), evaluate=False)` was retyped as an `srepr` string containing
+`evaluate=False`, which `srepr` never prints. With the PR, both cases come out as the unevaluated structures the
+issue asks for, so PR #15 looks like a full fix that only the wrong test keeps Unproven. The writer prompt now
+says to build expected values from the issue's code and compare objects. The after-fix review now names printed
+strings that a printer would not produce.
+
+One re-run of #15 with that rule (`--label rule`): **Proven**, 3 of 3, existing tests hold.
+- The first writer spent its 40-command budget on a test that passed on the base code.
+- The self-recovery retry built `Mul(Integer(-1), Add(Symbol('x'), Integer(2), evaluate=False), evaluate=False)`
+  from the issue's code and compared it with `==`. That fails on base (`-x - 2 == -(x + 2)`) and passes with the PR.
+- It cost 535 s and 555K tokens. That is one sample of a stochastic writer.
+
+Across the three re-run checks, Unproven went from 2 of 3 (#15, #16) to 1 of 3. The one left is #16, a genuine
+partial fix.
