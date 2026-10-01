@@ -199,3 +199,29 @@ def test_check_output_carries_the_second_opinion_on_a_mixed_result():
     ev["second_opinion"] = {"faithful": True, "reason": "the issue asks for it", "about": "mixed"}
     assert "Second opinion: the change may miss part of the issue: the issue asks for it" in \
         github_app.check_output(ev, "u")["summary"]  # hedged: the judge was wrong about srepr on sympy #15
+
+
+def test_key_problem_names_what_is_wrong_without_showing_the_key(monkeypatch, tmp_path, rsa_key):
+    # Seen on Render: a key path that wasn't there, and a key value that wasn't a PEM; each a bare 500.
+    monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_PATH", str(tmp_path / "missing.pem"))
+    assert "can't be read" in github_app.key_problem() and "missing.pem" in github_app.key_problem()
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "receipts.private-key.pem")  # a file name pasted as the key
+    problem = github_app.key_problem()
+    assert "not a PEM private key" in problem and "receipts.private-key.pem" not in problem
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", rsa_key.private_pem)
+    assert github_app.key_problem() == ""
+
+
+def test_an_unusable_key_means_not_configured_rather_than_a_crash(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "GITHUB_APP_ID", "1")
+    monkeypatch.setattr(config, "GITHUB_APP_SLUG", "receipts")
+    monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_PATH", str(tmp_path / "missing.pem"))
+    assert github_app.configured() is False
+
+
+def test_a_key_pasted_on_one_line_still_signs(monkeypatch, rsa_key):
+    # Line breaks turned into spaces by a one-line settings field are tolerated by the PEM parser.
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", " ".join(rsa_key.private_pem.split()))
+    assert github_app.key_problem() == ""

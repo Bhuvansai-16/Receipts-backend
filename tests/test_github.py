@@ -58,6 +58,7 @@ def gh(monkeypatch):
     monkeypatch.setattr(config, "GITHUB_APP_SLUG", "receipts-dev")
     monkeypatch.setattr(config, "GITHUB_WEBHOOK_SECRET", SECRET)
     monkeypatch.setattr(config, "github_private_key", lambda: "pem")
+    monkeypatch.setattr(github_app, "key_problem", lambda: "")  # these tests are about routes, not keys
     monkeypatch.setattr(github_app, "app_jwt", lambda now=None: "app.jwt")
     monkeypatch.setattr(auth, "_client", auth._new_client(httpx.MockTransport(handler)))
     monkeypatch.setattr(targets, "pr_target", fake_pr_target)

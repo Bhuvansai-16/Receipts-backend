@@ -3,6 +3,7 @@
 python -m receipts serve   ->   http://127.0.0.1:8000   (the UI is the separate receipts-frontend repo)
 """
 import asyncio
+import logging
 import hashlib
 import json
 from contextlib import asynccontextmanager
@@ -17,10 +18,11 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from . import auth, checks, config, db, demo, engine, github, swebench
+from . import auth, checks, config, db, demo, engine, github, github_app, swebench
 from .checks import LIVE
 
 MAX_DIFF_BYTES = 200_000
+log = logging.getLogger("uvicorn.error")
 
 
 class RunRequest(BaseModel):
@@ -38,6 +40,8 @@ async def lifespan(app: FastAPI):
     if pool is None:  # ponytail: no DATABASE_URL = runs in memory, seeded from runs/*.json; new ones don't persist
         await db.import_runs(app.state.runs, config.RUNS_DIR)
     await app.state.runs.fail_unfinished()  # their tasks died with the previous process
+    if config.GITHUB_APP_ID and (problem := github_app.key_problem()):
+        log.warning("GitHub App disabled: %s", problem)
     yield
     warmup.cancel()
     await auth.close()
@@ -94,7 +98,8 @@ def _load(instance_id: str) -> swebench.Instance:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True}
+    # The GitHub App key is the setting most often broken in deployment; say what is wrong, never the key.
+    return {"ok": True, "github_app": github_app.key_problem() or "ok"}
 
 
 @app.get("/api/instances")

@@ -62,7 +62,8 @@ def sse_types(api, run_id):
 
 
 def test_health(api):
-    assert api.get("/api/health").json() == {"ok": True}
+    body = api.get("/api/health").json()
+    assert body["ok"] is True and "github_app" in body  # "ok", or why the GitHub App key can't be used
 
 
 def test_instances_are_pytest_only_and_cacheable(api):

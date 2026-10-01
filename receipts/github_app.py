@@ -28,8 +28,26 @@ class GitHubError(RuntimeError):
         self.status = status
 
 
+def key_problem() -> str:
+    """Why the GitHub App's private key can't sign, or "" when it can. Never contains the key itself.
+
+    Seen on Render: a key path that wasn't there, and a key value that wasn't a PEM; each turned GitHub calls
+    into a bare 500. (A PEM pasted on one line is fine: the parser tolerates the whitespace.)"""
+    try:
+        key = config.github_private_key()
+    except OSError as e:
+        return f"GITHUB_APP_PRIVATE_KEY_PATH can't be read ({type(e).__name__}: {e.filename})"
+    if not key:
+        return "neither GITHUB_APP_PRIVATE_KEY nor GITHUB_APP_PRIVATE_KEY_PATH is set"
+    try:
+        jwt.encode({"iss": "check"}, key, algorithm="RS256")
+    except Exception as e:  # PyJWT / cryptography: InvalidKeyError, ValueError, ...
+        return f"the private key is not a PEM private key ({type(e).__name__}): use the whole .pem, BEGIN to END"
+    return ""
+
+
 def configured() -> bool:
-    return bool(config.GITHUB_APP_ID and config.GITHUB_APP_SLUG and config.github_private_key())
+    return bool(config.GITHUB_APP_ID and config.GITHUB_APP_SLUG and not key_problem())
 
 
 def install_url() -> str:
