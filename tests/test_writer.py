@@ -449,3 +449,9 @@ def test_retry_history_carries_the_last_rejection_and_file():
                                 submissions=[{"attempt": 1, "accepted": False, "reason": "r", "code": "def test_a(): pass"}])
     text = writer.retry_history(first)
     assert "every test passed" in text and "def test_a(): pass" in text
+
+
+def test_prompt_builds_expected_values_from_the_issues_code():
+    # sympy #15, twice: the issue's expected Mul(-1, Add(x, 2, evaluate=False), evaluate=False) was retyped as an
+    # srepr string with evaluate=False in it, which srepr never prints, so no correct fix could pass the test.
+    assert "build it in the test from that same code" in " ".join(writer.PROMPT.split())

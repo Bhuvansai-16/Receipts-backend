@@ -51,6 +51,10 @@ Rules:
   first one; a reviewer rejects tests that leave one out.
   No extra cases, other methods/verbs, or stricter checks the issue doesn't ask for; a reviewer rejects
   tests that go beyond the issue.
+- When the issue writes an expected result as code (a constructor call, a literal), build it in the test from
+  that same code and compare the objects with ==. Never retype what you think str(), repr() or a printer shows
+  for it: printers can leave out what the code says (sympy's srepr never prints evaluate=False), and a retyped
+  string can fail even after a correct fix.
 - Keep it small: 1-2 focused test functions, no network access, no new dependencies.
 - Stop as soon as submit_test answers ACCEPTED.
 """
@@ -195,8 +199,9 @@ async def after_fix_check(issue: str, test_code: str, tests: list[str]) -> list[
         "A bug report and pytest tests written from it are below. These tests fail on the current code: "
         f"{', '.join(tests)}. For each of them, imagine the code fixed exactly as the report wants, work out what "
         "the checked expression would then evaluate to, and say whether the assertion would pass. A test that "
-        "compares a floating-point approximation with an exact value, or checks a value the fix doesn't change, "
-        "would still fail.\n\n"
+        "compares a floating-point approximation with an exact value, checks a value the fix doesn't change, or "
+        "compares with a printed string the printer would not produce for the correct object (sympy's srepr never "
+        "shows evaluate=False) would still fail.\n\n"
         f"Bug report:\n{issue[:8000]}\n\nTests:\n```python\n{test_code}\n```"
     )
     review = await config.llm("judge").with_structured_output(AfterFixReview, method="function_calling").ainvoke(prompt)
