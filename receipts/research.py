@@ -56,9 +56,12 @@ def api_names(issue: str, library: str) -> list[str]:
 
 
 def _allowed(url: str) -> bool:
-    host = urlparse(url).netloc.lower()
+    parts = urlparse(url)
+    host = parts.netloc.lower()
     on_code_host = any(host == h or host.endswith("." + h) for h in CODE_HOSTS)
-    return bool(host) and not on_code_host and not any(v in url for v in SOURCE_VIEWS + INDEX_PAGES)
+    # web links only: sources are shown as links on public receipts (javascript://host/... has a host too)
+    return (parts.scheme in ("http", "https") and bool(host) and not on_code_host
+            and not any(v in url for v in SOURCE_VIEWS + INDEX_PAGES))
 
 
 @traceable(name="research_brief")

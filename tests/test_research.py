@@ -63,3 +63,12 @@ def test_a_slow_search_cannot_stall_a_check(monkeypatch):
     monkeypatch.setattr(research, "SEARCH_TIMEOUT_S", 0.05)
     brief = asyncio.run(asyncio.wait_for(research.research("a/sympy", ISSUE_2, FakeSearch(delay=5)), 2))
     assert brief.sources == [] and brief.for_writer() == ""
+
+
+def test_only_web_links_become_sources():
+    # A receipt is a public page: a javascript: or data: "link" from a search result must never reach it.
+    hostile = [{"title": "x", "url": "javascript://docs.sympy.org/%0Aalert(1)", "content": "a"},
+               {"title": "y", "url": "data://docs.sympy.org/text", "content": "b"},
+               {"title": "ok", "url": "https://docs.sympy.org/latest/modules/core.html", "content": "c"}]
+    brief = asyncio.run(research.research("a/sympy", ISSUE_2, FakeSearch(results=hostile)))
+    assert [s["url"] for s in brief.sources] == ["https://docs.sympy.org/latest/modules/core.html"]
