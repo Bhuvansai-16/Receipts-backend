@@ -185,3 +185,9 @@ def test_proven_without_existing_tests_does_not_say_they_hold():
     # No tests found for the changed files means no suite ran; "existing tests hold" would claim what never ran.
     _, why = fix_verdict([R(FAIL)] * 3, [R(PASS)] * 3, None, None)
     assert "existing tests hold" not in why and "no existing tests" in why
+
+
+def test_a_pr_run_that_never_executed_is_not_called_mixed():
+    # A sandbox outage is not "fails differently with the change": nothing ran.
+    v, why = fix_verdict([R(FAIL)] * 3, [R(PASS), PytestRun(), R(PASS)], None, None)
+    assert v is Verdict.UNPROVEN and "did not run on the PR in 1/3 runs" in why

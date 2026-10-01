@@ -103,6 +103,8 @@ def fix_verdict(
         return Verdict.UNPROVEN, "patch does not apply to the base commit"
 
     repro = _failing(base_runs[0]).keys()
+    if idle := sum(not r.results for r in pr_runs):  # an outage, not a result: never "fails differently"
+        return Verdict.UNPROVEN, f"the blind test did not run on the PR in {idle}/{len(pr_runs)} runs (sandbox error or timeout)"
     if all(_all_passed(r) for r in pr_runs):
         if not all(repro <= r.results.keys() for r in pr_runs):
             return Verdict.UNPROVEN, "the blind test did not run on the PR (deselected or not collected)"

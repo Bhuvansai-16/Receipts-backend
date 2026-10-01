@@ -188,7 +188,7 @@ def test_a_test_with_backticks_cannot_break_out_of_its_code_block():
 
 def test_check_output_without_forks_still_says_what_happened():
     out = github_app.check_output({"verdict": "NO_CHECKABLE_CLAIM", "reason": "classified as 'none'"}, "u")
-    assert out["title"].startswith("No checkable claim") and out["text"] == "" and "classified" in out["summary"]
+    assert out["title"].startswith("No checkable claim") and "text" not in out and "classified" in out["summary"]
 
 
 def test_check_output_carries_the_second_opinion_on_a_mixed_result():

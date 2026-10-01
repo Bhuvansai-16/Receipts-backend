@@ -150,8 +150,10 @@ def check_output(ev: dict, details_url: str) -> dict:
         lines.append(f"- Second opinion: {view}: {_plain(opinion.get('reason') or '', 1000)}")
     lines += ["", f"Reason: {_plain(ev.get('reason') or '', 2000)}", "", f"Full receipt: {details_url}"]
     code = "\n".join(((ev.get("writer") or {}).get("test_code") or "").splitlines()[:60])
-    text = f"### Blind test (written from the issue alone)\n{_fenced(code[:LIMIT])}" if code else ""
-    return {"title": headline.split(":")[0], "summary": "\n".join(lines)[:LIMIT], "text": text[:LIMIT]}
+    out = {"title": headline.split(":")[0], "summary": "\n".join(lines)[:LIMIT]}
+    if code:  # no empty "text": GitHub must never get a reason to refuse the completion
+        out["text"] = f"### Blind test (written from the issue alone)\n{_fenced(code[:LIMIT])}"[:LIMIT]
+    return out
 
 
 async def finish_check(installation_id, repo_id, full_name, check_run_id, evidence: dict, details_url) -> None:
