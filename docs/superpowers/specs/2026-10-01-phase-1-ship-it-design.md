@@ -248,3 +248,25 @@ spec.
 | 2 Oct | Component 4 (the demo): backend, frontend, case selection |
 | 3 Oct | Component 5 (split hosting): code, container, first Cloud Run and Vercel deploys |
 | 4 Oct | Demo case validation, outside settings, the end-to-end checks above, the Phase 1 check |
+
+## Results (2026-10-01)
+
+**Demo cases.** Each case ran once through the no-sign-in endpoint, on the local API with today's pipeline.
+The results are stored in Neon as the first demo receipts, so the gallery starts with real runs. Both wrong
+patches applied cleanly in a base sandbox before the runs.
+
+| Case | Verdict | Time | Tokens |
+|---|---|---|---|
+| xarray 4629, real fix | PROVEN | 55 s | 52K |
+| xarray 4629, empty patch | REFUTED | 50 s | 55K |
+| xarray 4629, wrong patch (copies the attrs, returns the original) | REFUTED | 53 s | 56K |
+| requests 1142, real fix | PROVEN | 42 s | 41K |
+| requests 1142, empty patch | REFUTED | 97 s | 108K |
+| requests 1142, wrong patch (skips Content-Length for HEAD only) | REFUTED | 49 s | 44K |
+
+All six gave the expected verdict, so every case stays listed. Together they took about six minutes and 355K
+tokens. A demo check costs well under a minute of a visitor's time and a few cents of model spend.
+
+**Model outages.** A model outage anywhere in a check now reads as one. The writer's own outage gives "the
+test writer's model was unavailable". Any other stage gives "a model was unavailable", for example the
+classifier, which is the first model call. Both are UNPROVEN, with no retry and no blame.
