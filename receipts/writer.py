@@ -6,11 +6,18 @@ Acceptance is decided by code (repro_check on a clean fork), not by the agent.
 import ast
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import openai
 from contree_sdk.langchain.sandbox import ContreeSandbox
-from deepagents import create_deep_agent
-from deepagents.backends.protocol import ExecuteResponse
+from deepagents.backends.composite import CompositeBackend
+from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.backends.protocol import (PERMISSION_DENIED, DeleteResult, EditResult, ExecuteResponse,
+                                          FileUploadResponse, WriteResult)
+from deepagents.middleware.filesystem import FilesystemMiddleware
+from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+from deepagents.middleware.skills import SkillsMiddleware
+from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
@@ -26,6 +33,29 @@ EXPLORE_LIMIT = 16  # look-around tool calls before the first submit_test
 RETRY_ALLOWANCE = 6  # more after each submission, to act on what was rejected
 WRITE_TOOLS = {"write_file", "edit_file", "submit_test"}
 UNCHANGED_LIMIT = 2  # resubmissions of an unchanged test file before the run ends
+SKILLS_DIR = Path(__file__).parent / "skills"
+SKILLS_ROOT = "/skills/"
+# Deepagents' file tools minus `task` (sub-agents outside the look-around budget) and `delete`, with short
+# descriptions: every turn re-sends them, and the stock ones are 4,481 characters for these seven.
+WRITER_TOOLS = ["ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute"]
+TOOL_TEXT = {
+    "ls": "List a directory (absolute path).",
+    "read_file": "Read a text file (absolute path): 100 lines from `offset` unless you pass `limit`. The lines after "
+                 "the `@@ ... @@` header are the file's content.",
+    "write_file": "Create or overwrite a file (absolute path) with `content`.",
+    "edit_file": "Replace the exact text `old_string` with `new_string` in a file you have read. `old_string` must be "
+                 "unique unless `replace_all` is true; keep the file's indentation.",
+    "glob": "Find files by glob pattern under `path`, e.g. `**/test_*.py`.",
+    "grep": "Search files under `path` for a literal string (not a regex); `glob` limits which files. Returns matching "
+            "files; output_mode='content' shows the lines. For a regex, use execute with grep -rnE.",
+    "execute": "Run a shell command in the sandbox with the repository's Python environment active (cd /testbed "
+               "first for repo paths). Returns the output and exit code.",
+}
+# The stock skills prompt adds about 500 tokens of generic instructions to every turn; this says what matters.
+SKILLS_PROMPT = """## Skills
+Guides for situations only some issues have. When one fits this issue, read it with read_file (limit=1000) before writing the test; ignore the others.
+{skills_locations}{skills_load_warnings}
+{skills_list}"""
 
 PROMPT = f"""You write ONE pytest file that reproduces a reported bug in the repository at /testbed.
 
@@ -44,18 +74,12 @@ Rules:
 - Do not edit repository files. Create only {TEST_PATH}.
 - Tests must assert the behaviour the issue says is CORRECT, so they FAIL on the current code with an
   AssertionError (use plain `assert`). Import errors, other exceptions, or skips do not count.
-- If the bug IS an exception (e.g. "fit raises TypeError"), call the code inside try/except and turn it into
-  an assertion: `except TypeError as e: assert False, f"raised {{e!r}}"`. Don't use pytest.raises for this.
 - Test functions must be named test_* at module level so pytest collects them.
 - Test ONLY what the issue describes, the way it describes it: prefer the issue's own example, API and inputs.
 - Cover every concrete case the issue says is wrong now (each example with its expected result), not just the
   first one; a reviewer rejects tests that leave one out.
   No extra cases, other methods/verbs, or stricter checks the issue doesn't ask for; a reviewer rejects
   tests that go beyond the issue.
-- When the issue writes an expected result as code (a constructor call, a literal), build it in the test from
-  that same code and compare the objects with ==. Never retype what you think str(), repr() or a printer shows
-  for it: printers can leave out what the code says (sympy's srepr never prints evaluate=False), and a retyped
-  string can fail even after a correct fix.
 - Keep it small: 1-2 focused test functions, no network access, no new dependencies.
 - Stop as soon as submit_test answers ACCEPTED.
 """
@@ -86,6 +110,50 @@ class SafeSandbox(ContreeSandbox):
         return sandbox.record(self.log, command, out)
 
 
+class SkillsFolder(FilesystemBackend):
+    """This package's skills, served from the server's disk. Read-only and confined to the folder: the writer
+    reads untrusted issue text, so nothing it is told can change a skill or reach other files."""
+
+    def __init__(self):
+        super().__init__(root_dir=SKILLS_DIR, virtual_mode=True)
+
+    def write(self, file_path, content):
+        return WriteResult(error=PERMISSION_DENIED)
+
+    async def awrite(self, file_path, content):
+        return self.write(file_path, content)
+
+    def edit(self, file_path, old_string, new_string, replace_all=False):
+        return EditResult(error=PERMISSION_DENIED)
+
+    async def aedit(self, file_path, old_string, new_string, replace_all=False):
+        return self.edit(file_path, old_string, new_string, replace_all)
+
+    def delete(self, file_path):
+        return DeleteResult(error=PERMISSION_DENIED)
+
+    async def adelete(self, file_path):
+        return self.delete(file_path)
+
+    def upload_files(self, files):
+        return [FileUploadResponse(path=path, error=PERMISSION_DENIED) for path, _ in files]
+
+    async def aupload_files(self, files):
+        return self.upload_files(files)
+
+
+def build_agent(*, model, tools, system_prompt, backend, middleware):
+    """Deepagents' own middleware with only what one test file needs: its file tools (no task, no delete), its
+    skills (from the server, so reading one is no sandbox command), and dangling tool call repair."""
+    files = CompositeBackend(default=backend, routes={SKILLS_ROOT: SkillsFolder()})
+    return create_agent(model=model, tools=tools, system_prompt=system_prompt, middleware=[
+        FilesystemMiddleware(backend=files, tools=WRITER_TOOLS, custom_tool_descriptions=TOOL_TEXT),
+        SkillsMiddleware(backend=files, sources=[(SKILLS_ROOT, "Receipts")], system_prompt=SKILLS_PROMPT),
+        PatchToolCallsMiddleware(),
+        *middleware,
+    ])
+
+
 class WriterDone(Exception):
     """Ends the agent run once a test is accepted or no attempts are left. Told to stop, the writer kept
     probing (seen: 77 s after acceptance)."""
@@ -99,14 +167,19 @@ class ExplorationBudget(AgentMiddleware):
     into feedback it can act on, and ends the run once accepted. Writing and submitting always run.
     """
 
-    def __init__(self, submit):
+    def __init__(self, submit, skills_read: list | None = None):
         super().__init__()
         self.left = EXPLORE_LIMIT
         self.submit = submit  # the agent's submit_test tool
         self.seen: dict[str, str] = {}  # look-around call -> its output, until the next write changes things
+        self.skills_read = [] if skills_read is None else skills_read  # skill files the agent read
 
     async def awrap_tool_call(self, request, handler):
         name = request.tool_call["name"]
+        path = str(request.tool_call.get("args", {}).get("file_path", ""))
+        if name == "read_file" and path.startswith(SKILLS_ROOT):  # guidance from the server, not looking around
+            self.skills_read.append(path)
+            return await handler(request)
         reply = lambda content: ToolMessage(content, tool_call_id=request.tool_call["id"], name=name)  # noqa: E731
         if name == "submit_test":
             self.left = RETRY_ALLOWANCE
@@ -263,6 +336,7 @@ class WriterResult:
     submissions: list[dict] = field(default_factory=list)  # every counted attempt: its file and verdict
     provider_error: str = ""  # set when the model provider failed, so the engine doesn't blame or retry the writer
     reused_from: str = ""  # run id of the check whose blind test this one reuses
+    skills_read: list[str] = field(default_factory=list)  # skill files the agent read
 
 
 def retry_history(first: WriterResult) -> str:
@@ -365,8 +439,8 @@ async def write_test(issue: str, base_image, emit=None, *, brief: str = "", hist
         return "ACCEPTED. Stop now."
 
     cases = await stated_cases(issue)
-    agent = create_deep_agent(model=config.llm(role), tools=[submit_test],
-                              system_prompt=PROMPT, backend=backend, middleware=[ExplorationBudget(submit_test)])
+    agent = build_agent(model=config.llm(role), tools=[submit_test], system_prompt=PROMPT, backend=backend,
+                        middleware=[ExplorationBudget(submit_test, out.skills_read)])
     message = (f"Issue:\n\n{issue}"
                + ("\n\nCases the issue states (cover each):" + "".join(f"\n- {c}" for c in cases) if cases else "")
                + brief + history)

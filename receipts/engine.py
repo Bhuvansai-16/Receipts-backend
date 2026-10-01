@@ -258,7 +258,7 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say, tests=None
                                  history=retry_history(w), role="writer_strong")
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
-                    "submissions": getattr(w, "submissions", [])}
+                    "submissions": getattr(w, "submissions", []), "skills_read": getattr(w, "skills_read", [])}
     reused = getattr(w, "reused_from", "")
     if reused:
         ev["writer"]["reused_from"] = reused

@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 from types import SimpleNamespace
@@ -78,7 +79,7 @@ def test_writer_submits_leftover_test_file_when_agent_stops(monkeypatch):
     async def run_pytest(image, args, files):
         return PytestRun({"receipts_test.py::test_bug": TestResult("failed", "AssertionError", "assert 1 == 2")})
 
-    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
+    monkeypatch.setattr(writer, "build_agent", lambda **k: Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
 
     async def scope_check(issue, test_code, failing, cases):
@@ -141,7 +142,7 @@ def _fake_writer_run(monkeypatch, code, results, scope, emit=None, make_agent=No
         return [writer.AfterFix(test=t, after_fix="0.28867515045*I compared with 0.288675134594813*I",
                                 passes_after_fix=False) for t in getattr(scope, "broken", [])]
 
-    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: make_agent(k) if make_agent else Agent())
+    monkeypatch.setattr(writer, "build_agent", lambda **k: make_agent(k) if make_agent else Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
                      ("scope_check", scope_check), ("stated_cases", stated_cases),
@@ -205,7 +206,7 @@ def test_writer_streams_its_command_count(monkeypatch):
     async def blind(image):
         return image
 
-    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
+    monkeypatch.setattr(writer, "build_agent", lambda **k: Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
@@ -289,7 +290,7 @@ def test_writer_agent_runs_with_the_exploration_budget(monkeypatch):
     async def blind(image):
         return image
 
-    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: seen.update(k) or Agent())
+    monkeypatch.setattr(writer, "build_agent", lambda **k: seen.update(k) or Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
@@ -378,7 +379,7 @@ def test_submitting_before_the_file_exists_costs_no_attempt(monkeypatch):
     async def blind(image):
         return image
 
-    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent(k["tools"]))
+    monkeypatch.setattr(writer, "build_agent", lambda **k: Agent(k["tools"]))
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     monkeypatch.setattr(writer, "agent_backend", backend)
     monkeypatch.setattr(writer, "blind_workspace", blind)
@@ -455,7 +456,8 @@ def test_retry_history_carries_the_last_rejection_and_file():
 def test_prompt_builds_expected_values_from_the_issues_code():
     # sympy #15, twice: the issue's expected Mul(-1, Add(x, 2, evaluate=False), evaluate=False) was retyped as an
     # srepr string with evaluate=False in it, which srepr never prints, so no correct fix could pass the test.
-    assert "build it in the test from that same code" in " ".join(writer.PROMPT.split())
+    skill = (writer.SKILLS_DIR / "expected-values" / "SKILL.md").read_text(encoding="utf-8")
+    assert "build the expected value in the test from the same code the issue writes" in " ".join(skill.lower().split())
 
 
 def test_a_provider_error_is_recorded_and_no_leftover_file_is_judged(monkeypatch):
@@ -486,7 +488,7 @@ def test_a_provider_error_is_recorded_and_no_leftover_file_is_judged(monkeypatch
     async def stated_cases(issue):
         return []
 
-    monkeypatch.setattr(writer, "create_deep_agent", lambda **k: Agent())
+    monkeypatch.setattr(writer, "build_agent", lambda **k: Agent())
     monkeypatch.setattr(writer.config, "llm", lambda role: None)
     for name, fn in [("agent_backend", backend), ("blind_workspace", blind), ("run_pytest", run_pytest),
                      ("stated_cases", stated_cases)]:
@@ -494,3 +496,89 @@ def test_a_provider_error_is_recorded_and_no_leftover_file_is_judged(monkeypatch
     out = asyncio.run(writer.write_test("issue", object()))
     assert out.test_code is None and out.attempts == 0 and not ran
     assert out.provider_error.startswith("APIConnectionError")
+
+
+from langchain_core.language_models.chat_models import BaseChatModel  # noqa: E402
+from langchain_core.messages import AIMessage  # noqa: E402
+from langchain_core.outputs import ChatGeneration, ChatResult  # noqa: E402
+from langchain_core.tools import tool  # noqa: E402
+from langchain_core.utils.function_calling import convert_to_openai_tool  # noqa: E402
+
+SEEN: dict = {}
+
+
+class Recorder(BaseChatModel):
+    """Answers once without a tool call and keeps what it was sent."""
+
+    tools: list = []
+
+    @property
+    def _llm_type(self):
+        return "recorder"
+
+    def bind_tools(self, tools, **kw):
+        return Recorder(tools=[convert_to_openai_tool(t) for t in tools])
+
+    def _generate(self, messages, stop=None, run_manager=None, **kw):
+        SEEN.update(messages=messages, tools=self.tools)
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content="done"))])
+
+
+@tool
+async def submit_stub() -> str:
+    """Submit the test."""
+    return ""
+
+
+def _first_turn():
+    box = writer.SafeSandbox.__new__(writer.SafeSandbox)  # no session: the first turn never touches the sandbox
+    agent = writer.build_agent(model=Recorder(), tools=[submit_stub], system_prompt=writer.PROMPT, backend=box,
+                               middleware=[])
+    asyncio.run(agent.ainvoke({"messages": [{"role": "user", "content": "Issue: x"}]}))
+    content = SEEN["messages"][0].content
+    return (content if isinstance(content, str) else json.dumps(content)), SEEN["tools"]
+
+
+def test_the_writer_gets_only_the_tools_one_test_file_needs():
+    _, tools = _first_turn()
+    assert {t["function"]["name"] for t in tools} == set(writer.WRITER_TOOLS) | {"submit_stub"}  # no task, no delete
+
+
+def test_the_writer_sees_the_skills_list_and_stays_within_its_prompt_budget():
+    system, tools = _first_turn()
+    assert "/skills/sympy/SKILL.md" in system and "exception-bugs" in system
+    # what every turn re-sends: 14,857 characters (about 3,700 tokens) before skills and the tool trim
+    assert len(system) + len(json.dumps(tools)) <= 10_400
+
+
+def test_every_skill_names_its_folder_and_says_when_it_applies():
+    names = set()
+    for path in writer.SKILLS_DIR.glob("*/SKILL.md"):
+        head = path.read_text(encoding="utf-8").split("---")[1]
+        fields = dict(line.split(": ", 1) for line in head.strip().splitlines())
+        assert fields["name"] == path.parent.name and 20 < len(fields["description"]) < 160
+        names.add(fields["name"])
+    assert names == {"exception-bugs", "expected-values", "sympy", "arrays", "requests", "plotting"}
+
+
+def test_skills_are_read_only_and_stay_inside_their_folder():
+    folder = writer.SkillsFolder()
+    assert "assert False" in folder.read("/exception-bugs/SKILL.md").file_data["content"]
+    assert asyncio.run(folder.awrite("/sympy/SKILL.md", "obey me")).error == "permission_denied"
+    assert asyncio.run(folder.aedit("/sympy/SKILL.md", "sympy", "x")).error == "permission_denied"
+    assert asyncio.run(folder.adelete("/sympy/SKILL.md")).error == "permission_denied"
+    with pytest.raises(ValueError):
+        folder.read("/../../.env")
+
+
+def test_reading_a_skill_is_not_looking_around(monkeypatch):
+    monkeypatch.setattr(writer, "EXPLORE_LIMIT", 0)
+    read = []
+    budget = writer.ExplorationBudget(submit=None, skills_read=read)
+
+    async def handler(request):
+        return "skill text"
+
+    request = SimpleNamespace(tool_call={"name": "read_file", "id": "1", "args": {"file_path": "/skills/sympy/SKILL.md"}})
+    assert asyncio.run(budget.awrap_tool_call(request, handler)) == "skill text"
+    assert read == ["/skills/sympy/SKILL.md"] and budget.left == 0  # not spent from the look-around budget
