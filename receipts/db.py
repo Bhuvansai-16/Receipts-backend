@@ -312,9 +312,13 @@ async def migrate(url: str) -> list[str]:
 
 
 async def import_runs(store, runs_dir: Path) -> int:
-    """Load finished runs saved by the CLI (runs/*.json) as public example receipts (no owner)."""
+    """Load finished runs saved by the CLI (runs/*.json) as public example receipts (no owner).
+
+    Eval output (runs/eval/, and any stray eval-*.json) is for comparing pipeline versions, never public."""
     count = 0
     for path in sorted(runs_dir.glob("*.json")):
+        if path.name.startswith("eval-"):
+            continue
         try:
             evidence = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:  # a half-written file must not stop the API from starting

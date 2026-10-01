@@ -213,3 +213,15 @@ def test_global_recent_counts_every_user_in_the_window(store, run):
         await store.create("old", "u3", "x__y-1", "gold", T0 - timedelta(days=2))
         return await store.global_recent(T0 - timedelta(days=1))
     assert run(go()) == 2
+
+
+def test_import_runs_skips_eval_output(tmp_path):
+    # scripts/eval_prs.py results are comparisons for us, not public example receipts.
+    ev = {"instance_id": "x", "verdict": "PROVEN", "reason": "r", "seconds": 1.0, "events": []}
+    (tmp_path / "a-gold-20260101-000000.json").write_text(json.dumps(ev), encoding="utf-8")
+    (tmp_path / "eval-final-pr16.json").write_text(json.dumps(ev), encoding="utf-8")
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "eval-fixed-pr15.json").write_text(json.dumps(ev), encoding="utf-8")
+    store = db.MemoryRuns()
+    assert asyncio.run(db.import_runs(store, tmp_path)) == 1
+    assert list(store.rows) == ["a-gold-20260101-000000"]

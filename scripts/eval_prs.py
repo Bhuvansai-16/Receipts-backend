@@ -4,7 +4,8 @@
 
 The repository must have the Receipts GitHub App installed (its installation is read from the database).
 Models come from the environment as usual, so an A/B is two runs with a different MODEL_TEST_WRITER.
-Each receipt lands in runs/eval-<label>-pr<N>.json; one JSON line per pull request is printed.
+Each receipt lands in runs/eval/eval-<label>-pr<N>.json (never imported as a public example); one JSON line per
+pull request is printed.
 """
 import argparse
 import asyncio
@@ -28,9 +29,9 @@ async def check_one(inst_id: int, repo_id: int, repo: str, number: int, label: s
         target, diff, _ = await targets.pr_target(inst_id, repo_id, repo, number)
         ev = await engine.check(target, diff)
     ev["source"] = {"repo": repo, "pr_number": number}
-    config.RUNS_DIR.mkdir(exist_ok=True)
-    (config.RUNS_DIR / f"eval-{label}-pr{number}.json").write_text(json.dumps(ev, indent=1, default=str),
-                                                                   encoding="utf-8")
+    out = config.RUNS_DIR / "eval"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f"eval-{label}-pr{number}.json").write_text(json.dumps(ev, indent=1, default=str), encoding="utf-8")
     writer = ev.get("writer") or {}
     return {"pr": number, "label": label, "verdict": ev["verdict"], "seconds": round(time.monotonic() - t0),
             "tokens": sum(u.get("total_tokens", 0) for u in (ev.get("tokens") or {}).values()),
