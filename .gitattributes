@@ -1,0 +1,6 @@
+# Read on Linux (Cloud Build, Nebius sandboxes): keep LF even in Windows checkouts.
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+.gcloudignore text eol=lf
+requirements.txt text eol=lf
+*.diff text eol=lf
