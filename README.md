@@ -89,7 +89,27 @@ plausible wrong patch for two SWE-bench issues (`receipts/demo_cases.json`, wron
 - `POST /api/demo/runs {"case": "<id>"}`: starts a case, or joins the demo check already running (one at a
   time). Capped by `DEMO_RUNS_PER_DAY` (default 20) and `GLOBAL_RUNS_PER_DAY`.
 
-## Deploy: Cloud Run (API) and Vercel (UI)
+## Deploy: Render (API) and Vercel (UI)
+
+The API runs on Render at `https://receipts-backend-wnjy.onrender.com`. The UI runs on Vercel and forwards
+`/api/*` here (`vercel.json` in `receipts-frontend`), so the browser sees one origin and sign-in cookies stay
+first-party on the free hostnames. Live events and GitHub webhooks come here directly, because Vercel ends
+proxied requests after 120 seconds.
+
+Render > New > Web Service > this repository, runtime Docker (it builds the `Dockerfile`):
+
+- Instance: a paid type, about 1 GB of memory. Free instances sleep after 15 idle minutes, which drops GitHub
+  webhooks and running checks. Keep one instance, no autoscaling: live runs and their event stream live in one
+  process. Region: Ohio, next to Neon's `us-east-2`.
+- Health check path `/api/health`. Render sets `PORT`, and `serve` then listens on `0.0.0.0:$PORT`.
+- Environment: `NEBIUS_API_KEY`, `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `DATABASE_URL` (pooled),
+  `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_PRIVATE_KEY` (the whole `.pem` file), `CONTREE_PROJECT`, `NEON_AUTH_URL`,
+  `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, and `FRONTEND_URL` (the Vercel URL). Leave out
+  `GITHUB_APP_PRIVATE_KEY_PATH` (the key file isn't in the image) and `COOKIE_DOMAIN`.
+- GitHub App: Setup URL `https://<vercel-app>/api/github/setup` (through Vercel, it needs the session cookie),
+  webhook URL `https://receipts-backend-wnjy.onrender.com/api/github/webhook`.
+
+## Alternative: Cloud Run (API) and Vercel (UI)
 
 The UI runs on Vercel and forwards `/api/*` to this API on Google Cloud Run (`vercel.json` in
 `receipts-frontend`), so the browser sees one origin and sign-in cookies stay first-party on the free
