@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+import openai
 from langchain_core.callbacks import get_usage_metadata_callback
 from langsmith import traceable
 from pydantic import BaseModel
@@ -155,6 +156,8 @@ async def check(inst: Instance, patch: str | None, emit=None) -> dict:
     with get_usage_metadata_callback() as usage:
         try:
             v, reason = await _pipeline(inst, patch, ev, say)
+        except openai.APIError as e:  # a model provider outage (its client already retried): say so plainly
+            v, reason = Verdict.UNPROVEN, f"a model was unavailable: {type(e).__name__}: {e}"
         except Exception as e:  # asymmetry rule: anything unexpected is UNPROVEN, never REFUTED
             v, reason = Verdict.UNPROVEN, f"pipeline error: {type(e).__name__}: {e}"
     ev.update(verdict=v.value, reason=reason, seconds=round(time.monotonic() - t0, 1), tokens=usage.usage_metadata)

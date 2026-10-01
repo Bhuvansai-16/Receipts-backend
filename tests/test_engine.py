@@ -330,3 +330,16 @@ def test_a_provider_outage_gets_no_retry_and_says_so(monkeypatch):
     ev = asyncio.run(engine.check(INST, PATCH))
     assert len(calls) == 1 and "writer_first" not in ev
     assert ev["verdict"] == "UNPROVEN" and ev["reason"] == "the test writer's model was unavailable: APIConnectionError: down"
+
+
+def test_a_model_outage_anywhere_in_the_pipeline_says_so(monkeypatch):
+    # The classifier is the first model call, so a Token Factory outage usually surfaces there.
+    import httpx
+    import openai
+
+    async def classify(issue, patch):
+        raise openai.APIConnectionError(request=httpx.Request("POST", "https://tokenfactory.example/v1"))
+
+    monkeypatch.setattr(engine, "classify", classify)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "UNPROVEN" and ev["reason"].startswith("a model was unavailable: APIConnectionError")

@@ -37,8 +37,11 @@ def secrets_flag(names: list[str]) -> str:
 
 
 def gcloud(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
+    """Bytes in, not text: text mode on Windows would turn the private key's \\n into \\r\\n."""
     exe = shutil.which("gcloud") or sys.exit("gcloud is not installed or not on PATH")
-    return subprocess.run([exe, *args], input=stdin, capture_output=True, text=True)
+    r = subprocess.run([exe, *args], input=stdin.encode() if stdin is not None else None, capture_output=True)
+    return subprocess.CompletedProcess(r.args, r.returncode, r.stdout.decode(errors="replace"),
+                                       r.stderr.decode(errors="replace"))
 
 
 def main() -> None:

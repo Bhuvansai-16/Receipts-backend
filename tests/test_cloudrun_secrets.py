@@ -14,3 +14,18 @@ def test_secrets_come_from_env_lines_and_skip_comments_blanks_and_empty_values()
 
 def test_the_deploy_flag_names_secrets_only():
     assert cloudrun_secrets.secrets_flag(["A", "B"]) == "A=A:latest,B=B:latest"
+
+
+def test_secret_values_reach_gcloud_as_bytes_with_their_newlines_intact(monkeypatch):
+    # Text mode on Windows would turn the private key's \n into \r\n.
+    seen = {}
+
+    def run(args, **kw):
+        seen.update(kw)
+        return cloudrun_secrets.subprocess.CompletedProcess(args, 0, b"out\n", b"")
+
+    monkeypatch.setattr(cloudrun_secrets.shutil, "which", lambda name: "gcloud")
+    monkeypatch.setattr(cloudrun_secrets.subprocess, "run", run)
+    r = cloudrun_secrets.gcloud("secrets", "create", "K", "--data-file=-", stdin="-----BEGIN\nabc\n-----END\n")
+    assert seen["input"] == b"-----BEGIN\nabc\n-----END\n" and not seen.get("text")
+    assert r.stdout == "out\n"
