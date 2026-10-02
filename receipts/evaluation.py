@@ -201,6 +201,30 @@ def report(rows: list[dict]) -> dict:
     }
 
 
+AGENT_NAMES = {
+    "20240615_appmap-navie_gpt4o": "AppMap Navie (GPT-4o)",
+    "20240620_sweagent_claude3.5sonnet": "SWE-agent (Claude 3.5 Sonnet)",
+    "20241028_agentless-1.5_gpt4o": "Agentless 1.5 (GPT-4o)",
+    "20241113_nebius-search-open-weight-models-11-24": "Nebius search (open-weight models)",
+    "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022": "AutoCodeRover 2.0 (Claude 3.5 Sonnet)",
+    "20241029_OpenHands-CodeAct-2.1-sonnet-20241022": "OpenHands CodeAct 2.1 (Claude 3.5 Sonnet)",
+    "20250410_cortexa": "CortexA",
+    "20250225_sweagent_claude-3-7-sonnet": "SWE-agent (Claude 3.7 Sonnet)",
+}
+_RACE_KEYS = ("run_id", "kind", "agent", "fixed", "verdict", "cost_usd", "reused")
+
+
+def races(rows: list[dict], titles: dict[str, str]) -> list[dict]:
+    """The issue race view: each issue's patches in row (dataset) order, with readable names."""
+    out: dict[str, dict] = {}
+    for r in rows:
+        race = out.setdefault(r["instance_id"], {"instance_id": r["instance_id"], "repo": r["repo"],
+                                                 "title": titles.get(r["instance_id"], ""), "patches": []})
+        name = {"gold": "the real fix", "none": "an empty patch"}.get(r["kind"]) or AGENT_NAMES.get(r["agent"], r["agent"])
+        race["patches"].append({**{k: r.get(k) for k in _RACE_KEYS}, "name": name, "reader": r.get("reader_answer")})
+    return list(out.values())
+
+
 def _pct(x: float) -> str:
     return f"{math.floor(x * 100 + 0.5)}%"  # half up, as the Results page rounds
 

@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import dotenv_values  # noqa: E402
 from langsmith import Client  # noqa: E402
 
-from receipts import config, evaluation  # noqa: E402
+from receipts import config, evaluation, swebench  # noqa: E402
 
 DATASET = "receipts-swebench-verified"
 SITE = "https://receipts-frontend-six.vercel.app"
@@ -96,14 +96,19 @@ def main() -> None:
     client = Client()
     rows = rows_for(args.receipts, args.reader, client)
     rep = evaluation.report([r for r in rows if r["verdict"] is not None or r["reason"]])
-    links = {"site": SITE}
+    out = config.ROOT / "eval"
+    old = json.loads((out / "results.json").read_text(encoding="utf-8")) if (out / "results.json").exists() else {}
+    links = {"site": SITE, **{k: v for k, v in old.get("links", {}).items() if k == "dataset"}}  # stays public
     if args.share:
         findings = scan(client, config.ROOT / "runs" / "eval" / args.receipts)
         if findings:
             sys.exit("not shared, secrets found: " + "; ".join(findings))
         share = client.share_dataset(dataset_name=DATASET)
         links["dataset"] = f"https://smith.langchain.com/public/{share['share_token']}/d"
-    out = config.ROOT / "eval"
+    titles = {iid: swebench.load_instance(iid).problem_statement.strip().splitlines()[0][:120]
+              for iid in {r["instance_id"] for r in rows}}
+    (out / "races.json").write_text(json.dumps(evaluation.races(rows, titles), indent=1, default=str),
+                                    encoding="utf-8")
     (out / "results.json").write_text(json.dumps({**rep, "links": links, "changes": CHANGES, "note": NOTE,
                                                   "experiments": {"receipts": args.receipts, "reader": args.reader}},
                                                  indent=1, default=str), encoding="utf-8")
