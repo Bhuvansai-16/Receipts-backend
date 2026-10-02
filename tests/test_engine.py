@@ -92,6 +92,13 @@ def test_majority_vote_picks_most_common_kind():
     assert engine.majority([none, none, fix]).kind == "none"
 
 
+def test_the_test_stands_only_if_every_second_opinion_trusts_it():
+    yes, no = engine.Judgement(faithful=True, reason="ok"), engine.Judgement(faithful=False, reason="env error")
+    assert engine.unanimous([yes, yes, yes]) is yes
+    assert engine.unanimous([yes, no, yes]) is no  # a split is doubt: UNPROVEN, never REFUTED
+    assert engine.unanimous([yes, None, yes]).faithful is False  # no structured answer
+
+
 def test_claim_prompt_counts_reported_wrong_behaviour_as_fix():
     assert "even if the issue also suggests an option" in engine.claim_prompt("issue", "")
 

@@ -60,12 +60,12 @@ def pr_of(run_id: str, evidence: dict) -> str:
     return label if label in ("gold", "none") else "diff"  # other labels were diff file names
 
 
-def _imported(run_id: str, evidence: dict) -> dict:
+def _imported(run_id: str, evidence: dict, user_id: str | None = None) -> dict:
     try:
         started = datetime.fromisoformat(evidence["started_at"])
     except (KeyError, TypeError, ValueError):
         started = _now()
-    return {**dict.fromkeys(SUMMARY_KEYS), **result_columns(evidence), "id": run_id,
+    return {**dict.fromkeys(SUMMARY_KEYS), **result_columns(evidence), "id": run_id, "user_id": user_id,
             "instance_id": evidence["instance_id"], "pr": pr_of(run_id, evidence), "status": "done",
             "started_at": started, "finished_at": started + timedelta(seconds=evidence.get("seconds") or 0),
             "evidence": evidence}
@@ -155,8 +155,8 @@ class MemoryRuns:
             r.update(status="error", reason=RESTARTED, finished_at=_now())
         return len(stale)
 
-    async def import_run(self, run_id, evidence):
-        self.rows.setdefault(run_id, _imported(run_id, evidence))
+    async def import_run(self, run_id, evidence, user_id=None):
+        self.rows.setdefault(run_id, _imported(run_id, evidence, user_id))
 
     async def get_blind_test(self, key):
         hit = self.blind_tests.get(key)
@@ -291,8 +291,8 @@ class PgRuns:
         return await self._exec("UPDATE runs SET status = 'error', reason = %s, finished_at = now() "
                                 "WHERE status IN ('queued', 'running')", (RESTARTED,))
 
-    async def import_run(self, run_id, evidence):
-        r = _imported(run_id, jsonb_safe(evidence))
+    async def import_run(self, run_id, evidence, user_id=None):
+        r = _imported(run_id, jsonb_safe(evidence), user_id)
         await self._exec(f"INSERT INTO runs ({SUMMARY}, evidence) VALUES ({', '.join(['%s'] * (len(SUMMARY_KEYS) + 1))}) "
                          "ON CONFLICT (id) DO NOTHING", (*(r[k] for k in SUMMARY_KEYS), Jsonb(r["evidence"])))
 
@@ -346,5 +346,20 @@ async def import_runs(store, runs_dir: Path) -> int:
             continue
         if isinstance(evidence, dict) and evidence.get("instance_id") and evidence.get("verdict"):
             await store.import_run(path.stem, evidence)
+            count += 1
+    return count
+
+
+async def import_eval(store, eval_dir: Path) -> int:
+    """Publish an evaluation's receipts (runs/eval/<experiment>/*.json) under owner "eval", which no gallery lists:
+    each opens by its link, like any receipt."""
+    count = 0
+    for path in sorted(eval_dir.glob("*.json")):
+        try:
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if isinstance(evidence, dict) and evidence.get("instance_id") and evidence.get("verdict"):
+            await store.import_run(path.stem, evidence, user_id="eval")
             count += 1
     return count

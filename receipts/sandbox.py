@@ -1,6 +1,7 @@
 """Sandbox helpers: pytest in throwaway forks, patch application. All runs start from a given image."""
 import asyncio
 import json
+import re
 from pathlib import Path
 
 from . import config
@@ -89,6 +90,19 @@ async def run_pytest(image, args: list[str], files: dict[str, bytes] | None = No
         except Exception as e:  # timeout / API error -> empty run -> rules yield UNPROVEN
             return PytestRun(output=f"sandbox error: {type(e).__name__}: {e}")
     return parse_probe_output(text(r.stdout), text(r.stderr))
+
+
+def text_part(patch: str) -> tuple[str, list[str]]:
+    """The patch without binary files that carry no data ("Binary files ... differ", as GitHub's .diff and
+    agent diffs show added images), and the paths dropped. git apply rejects the whole patch over one of them;
+    the code under the verdict is still exactly what the author wrote."""
+    keep, dropped = [], []
+    for section in re.split(r"(?m)^(?=diff --git )", patch):
+        if re.search(r"(?m)^Binary files .* differ$", section) and "GIT binary patch" not in section:
+            dropped += re.findall(r"^diff --git a/(\S+)", section)
+        else:
+            keep.append(section)
+    return "".join(keep), dropped
 
 
 async def apply_patch(image, patch: str):

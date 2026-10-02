@@ -1,0 +1,1802 @@
+[
+ {
+  "instance_id": "astropy__astropy-12907",
+  "repo": "astropy/astropy",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "0f3e44432ed8540e9526edff4f83793948a2f139fc3971b67c30043c1eb7964a"
+ },
+ {
+  "instance_id": "astropy__astropy-13236",
+  "repo": "astropy/astropy",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "e3366b1923660fb0ae2bbc8fb16981184e77fc3f9e3669727f1a3e6061ddaa6d"
+ },
+ {
+  "instance_id": "astropy__astropy-13453",
+  "repo": "astropy/astropy",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "7f579408e4ad94b129886283f9c6df7d27d3965e2aaaa88141045515dd4710d9"
+ },
+ {
+  "instance_id": "astropy__astropy-13579",
+  "repo": "astropy/astropy",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "3b039e1e3ea35e64bb09b0b59d7b46d6190d2196972a8e9fe7383957f299d068"
+ },
+ {
+  "instance_id": "astropy__astropy-14182",
+  "repo": "astropy/astropy",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "1c80b57d515ed4da42842dff56cfec5b5c72fee6a469c9bb33f2f6b59dba0f3c"
+ },
+ {
+  "instance_id": "astropy__astropy-14369",
+  "repo": "astropy/astropy",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "f58ccaa7b95c38a3d9ee7c950a51e98e34ca30e9f778e74338f4fadc450ad055"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-14623",
+  "repo": "matplotlib/matplotlib",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "bf6c58aeace23b251199ff653b448e26c5b916eabbe9f7972cd16fbb81bfbf03"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20826",
+  "repo": "matplotlib/matplotlib",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "95b743f7c62be8994b7afc0d3c3fe4ba4362baf39ab0c91f31ac26e97550ce7f"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20859",
+  "repo": "matplotlib/matplotlib",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "c3148dbc6d6758e57d0999dc42b2e1166d836e082da402eba0a688855c4f4e4f"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-22865",
+  "repo": "matplotlib/matplotlib",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "4769b39c4deb49d7077839b9db329f693d031890ce5b6759d8ac076d5b4ef125"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23299",
+  "repo": "matplotlib/matplotlib",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "b15079ba0b887c4386893f5beb03cc077d9ff65b167d1910de6bfbc8151cfb2e"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23314",
+  "repo": "matplotlib/matplotlib",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "b6d8952d0d9b8851d9ddd2a7f97980a3cee631902f1b92f9965ac62159d58fc4"
+ },
+ {
+  "instance_id": "mwaskom__seaborn-3069",
+  "repo": "mwaskom/seaborn",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "f209d3f9733c3c4bdcafb48f8601948c53ee16451e7775b33186439ccac7096c"
+ },
+ {
+  "instance_id": "psf__requests-1142",
+  "repo": "psf/requests",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "c25c1f930edaf8514d3a5f2bc5631a8e8080ecb2511c789ec171f37d14e627a6"
+ },
+ {
+  "instance_id": "psf__requests-1724",
+  "repo": "psf/requests",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "f02e7cb27f931afc59887bcd31705b7d8ad9a226b187b398262f202f605365df"
+ },
+ {
+  "instance_id": "psf__requests-1921",
+  "repo": "psf/requests",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "33fc461de67706a7d3c91008799489d6d1e6b521bfc0131dd22c4959d00b9f08"
+ },
+ {
+  "instance_id": "psf__requests-2931",
+  "repo": "psf/requests",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "5b5a77408b00928b0380cd6a40ccb53f0cf77b16f040e1743e313883aad104db"
+ },
+ {
+  "instance_id": "psf__requests-5414",
+  "repo": "psf/requests",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "41e9433ac5e2cdb17a3972bec818a1118ea4a3f2b7485cd11fff7e27f6f3f680"
+ },
+ {
+  "instance_id": "pydata__xarray-2905",
+  "repo": "pydata/xarray",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "4bf05606ff37d427b5d1eff27a61b41489785d022c234933fbc8879cad5fd762"
+ },
+ {
+  "instance_id": "pydata__xarray-3095",
+  "repo": "pydata/xarray",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "15ee0073513dfa4723e55f92c67f7ca66c9651a6d627c08c06e7bada6bcd7525"
+ },
+ {
+  "instance_id": "pydata__xarray-3151",
+  "repo": "pydata/xarray",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "011d7ae2930bcd82fcdb753fc555a4077b2a3053d5c677d91412f54f9b4d1833"
+ },
+ {
+  "instance_id": "pydata__xarray-3305",
+  "repo": "pydata/xarray",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "6e02fe879c0a070e2ded9b70e7f88a12551beb6b3e46a5a57bd4dbb0118c2266"
+ },
+ {
+  "instance_id": "pydata__xarray-3993",
+  "repo": "pydata/xarray",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "71416a1368862b9d068eab21976cb76e9d127f4d5596a1bffe21dd34eb32f5b8"
+ },
+ {
+  "instance_id": "pydata__xarray-4094",
+  "repo": "pydata/xarray",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "79eac1b06943072daa994e5fb5e7fc9e5eef5e6c34ea151cb550aa09f2da2b3a"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4970",
+  "repo": "pylint-dev/pylint",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "7eb3a09727133387bf81fa3a1596746a2dcca2c0c9eba95caaa69b65d619dccd"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6386",
+  "repo": "pylint-dev/pylint",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "9f82c0b5df51c65fbbe78c3f24bda13c07571ab541c2e50d0ee15a9aabbeef45"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6528",
+  "repo": "pylint-dev/pylint",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "ed4b5b19c13c683360c4743ed660335fe029bd870faa3e786eda6271abc55265"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7080",
+  "repo": "pylint-dev/pylint",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "f908ad1f6d4b8df3755a634c6741abf8ae613bc59278a54c16560c16d255580f"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7277",
+  "repo": "pylint-dev/pylint",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "50a6e08256232f773d7066b57477ca5e9ac08bf71a1310b392fdcd22427c7abe"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10081",
+  "repo": "pytest-dev/pytest",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "30b7bbcd61e92e71c186f5c36c622301a6d5dde818e67c97535fa30d7897af93"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5262",
+  "repo": "pytest-dev/pytest",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "2dbcd95f7a4bf52ae721d6289d1d4ee68dbb08ada5082e98784a7138fc126428"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5631",
+  "repo": "pytest-dev/pytest",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "21f9c28433e251db7f9b2313a75ce5cad6140818a4a6ed0bbab1fc81bfe09605"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7205",
+  "repo": "pytest-dev/pytest",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "3c49041a5759e3b82c185699eca4abb784bc4c0df2c99677370d2a3f3f6ee4f2"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7236",
+  "repo": "pytest-dev/pytest",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "9641921f5afd783a16547e1480b06453c7b819271c2df8f195b435afd1a5688b"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7432",
+  "repo": "pytest-dev/pytest",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "fe1bcec846085b964928724c5e75591b1e0280ef37dd9cdb7faf31a89cfcf062"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10908",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "eb73df0dcb9bcb8749a7832d29fad9d2d10d2dacf2e9f6026d53eb8e39f32070"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12682",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "631e2c178614daaab168ae7008c31a3026742c623da3ed4341d17d2dd7a4e3c4"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12973",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "316924267d8998c7514a391addbdf2bd3396d83a1fff5d9455a26948d6c41909"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-13124",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "04addd5a487db4d7860f810f5f84359d61f4bcf764c5b11064071d1197477883"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-14087",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "gold",
+  "agent": "",
+  "fixed": true,
+  "patch_url": "swebench:gold",
+  "patch_sha256": "819cd93cf36a6010195b74dc7106b268d9af01516be29821358c06ea5fa7600f"
+ },
+ {
+  "instance_id": "astropy__astropy-12907",
+  "repo": "astropy/astropy",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "astropy__astropy-13236",
+  "repo": "astropy/astropy",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "astropy__astropy-13453",
+  "repo": "astropy/astropy",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "astropy__astropy-13579",
+  "repo": "astropy/astropy",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "astropy__astropy-14182",
+  "repo": "astropy/astropy",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "astropy__astropy-14369",
+  "repo": "astropy/astropy",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-14623",
+  "repo": "matplotlib/matplotlib",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20826",
+  "repo": "matplotlib/matplotlib",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20859",
+  "repo": "matplotlib/matplotlib",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-22865",
+  "repo": "matplotlib/matplotlib",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23299",
+  "repo": "matplotlib/matplotlib",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23314",
+  "repo": "matplotlib/matplotlib",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "mwaskom__seaborn-3069",
+  "repo": "mwaskom/seaborn",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "psf__requests-1142",
+  "repo": "psf/requests",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "psf__requests-1724",
+  "repo": "psf/requests",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "psf__requests-1921",
+  "repo": "psf/requests",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "psf__requests-2931",
+  "repo": "psf/requests",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "psf__requests-5414",
+  "repo": "psf/requests",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pydata__xarray-2905",
+  "repo": "pydata/xarray",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pydata__xarray-3095",
+  "repo": "pydata/xarray",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pydata__xarray-3151",
+  "repo": "pydata/xarray",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pydata__xarray-3305",
+  "repo": "pydata/xarray",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pydata__xarray-3993",
+  "repo": "pydata/xarray",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pydata__xarray-4094",
+  "repo": "pydata/xarray",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4970",
+  "repo": "pylint-dev/pylint",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6386",
+  "repo": "pylint-dev/pylint",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6528",
+  "repo": "pylint-dev/pylint",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7080",
+  "repo": "pylint-dev/pylint",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7277",
+  "repo": "pylint-dev/pylint",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10081",
+  "repo": "pytest-dev/pytest",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5262",
+  "repo": "pytest-dev/pytest",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5631",
+  "repo": "pytest-dev/pytest",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7205",
+  "repo": "pytest-dev/pytest",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7236",
+  "repo": "pytest-dev/pytest",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7432",
+  "repo": "pytest-dev/pytest",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10908",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12682",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12973",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-13124",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-14087",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "none",
+  "agent": "",
+  "fixed": false,
+  "patch_url": "none",
+  "patch_sha256": ""
+ },
+ {
+  "instance_id": "astropy__astropy-12907",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/astropy__astropy-12907/patch.diff",
+  "patch_sha256": "573ff0fc95c061c297b622914351e3d4f654615f36a12a4908210bcb185de36f"
+ },
+ {
+  "instance_id": "astropy__astropy-13236",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/astropy__astropy-13236/patch.diff",
+  "patch_sha256": "c912102a23020e363183c70b38c0b6ca02f50540bf76bfea38e01090b8eadb7f"
+ },
+ {
+  "instance_id": "astropy__astropy-13453",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/astropy__astropy-13453/patch.diff",
+  "patch_sha256": "9f581db6c25dda8fea140bff5b6ea64d2fcd1e054d37c038a90eec2664e0155c"
+ },
+ {
+  "instance_id": "astropy__astropy-13579",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/astropy__astropy-13579/patch.diff",
+  "patch_sha256": "8567229f99f499bd43ca1a6d9c39f8c27355d444ada7cfe33915daa26bd54d04"
+ },
+ {
+  "instance_id": "astropy__astropy-14182",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/astropy__astropy-14182/patch.diff",
+  "patch_sha256": "648eba3418b09bfad4435ca90585974d290f925997d7fb002c05cb7d35890df4"
+ },
+ {
+  "instance_id": "astropy__astropy-14369",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/astropy__astropy-14369/patch.diff",
+  "patch_sha256": "7763b87f729dfcf569b8cb9a5232667171b022c23d3b7c1d5cbed7f6b852938e"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-14623",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/matplotlib__matplotlib-14623/patch.diff",
+  "patch_sha256": "48cdaa9a092d897972a6acde822c68d54f7cba9a4258ac3248327c89e9d78c2c"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20826",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/matplotlib__matplotlib-20826/patch.diff",
+  "patch_sha256": "5f8610ed259949c1495f5a8788f69dff30e5df4f28e2aef15ad54cdce8137fc7"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20859",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/matplotlib__matplotlib-20859/patch.diff",
+  "patch_sha256": "8036275015b670cd991c0df528e14f2e4d1d8610a7d0c60272ae6b30fea8c707"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-22865",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/matplotlib__matplotlib-22865/patch.diff",
+  "patch_sha256": "be6e88e3f4fdb906c522862cecb241478231a40132aba7408c965c5984880442"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23299",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/matplotlib__matplotlib-23299/patch.diff",
+  "patch_sha256": "1ffd087739a72e4ab80679c0cf32cbc00ff6a82efecbd2b55d6e6a7b96a91f0b"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23314",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/matplotlib__matplotlib-23314/patch.diff",
+  "patch_sha256": "8886f4bd285d221a0db1b367f15411084692272948a43abae46ebc6dd12099c3"
+ },
+ {
+  "instance_id": "mwaskom__seaborn-3069",
+  "repo": "mwaskom/seaborn",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/mwaskom__seaborn-3069/patch.diff",
+  "patch_sha256": "044daeb1e0bc4240ba1694c97bec4e77e6f9409b632031c9b28ce0eb97dcf338"
+ },
+ {
+  "instance_id": "psf__requests-1142",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/psf__requests-1142/patch.diff",
+  "patch_sha256": "296074536d5e30414cbd709e527873689108557c5082fcde3ac7a1a73e08e56b"
+ },
+ {
+  "instance_id": "psf__requests-1724",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/psf__requests-1724/patch.diff",
+  "patch_sha256": "4984712686bf22b985c00552bb11f3102a233f065b477cd5017e55eb1c9c8f44"
+ },
+ {
+  "instance_id": "psf__requests-1921",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/psf__requests-1921/patch.diff",
+  "patch_sha256": "469bef19349852b0a0f05d15cfe3b4c50699cde784597480240956296e528727"
+ },
+ {
+  "instance_id": "psf__requests-2931",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/psf__requests-2931/patch.diff",
+  "patch_sha256": "51b838d97b5ee9167abb6cba03b4f5ad719c6f3f8208f6bbdfc9f87d27dac7bd"
+ },
+ {
+  "instance_id": "psf__requests-5414",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/psf__requests-5414/patch.diff",
+  "patch_sha256": "f55f40d449df95d402415c273a4a911566d924b6c9a5b97db66a657631c1d81b"
+ },
+ {
+  "instance_id": "pydata__xarray-2905",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pydata__xarray-2905/patch.diff",
+  "patch_sha256": "4c2b0ac036f375ad7c356d72972a5f33d40a2b554444ae10fc57ea45563c6bba"
+ },
+ {
+  "instance_id": "pydata__xarray-3095",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pydata__xarray-3095/patch.diff",
+  "patch_sha256": "0955f8b49d5050985394f8d9797e1f528861b77d196606be98540f6aafd2cb3a"
+ },
+ {
+  "instance_id": "pydata__xarray-3151",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pydata__xarray-3151/patch.diff",
+  "patch_sha256": "a1061495ba2be3a7465ba9b1e9a22116c8e6a93bc7e4a20b5c28653fc2de29ad"
+ },
+ {
+  "instance_id": "pydata__xarray-3305",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pydata__xarray-3305/patch.diff",
+  "patch_sha256": "42cc9a161d1d24f6f62e00c6614c0699288a7a69ebdbffd1624625ca30d168d2"
+ },
+ {
+  "instance_id": "pydata__xarray-3993",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pydata__xarray-3993/patch.diff",
+  "patch_sha256": "4583df189b31f9fefdae6084425c944b6449dfbadc6266daead1dfeb6ee94eb8"
+ },
+ {
+  "instance_id": "pydata__xarray-4094",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pydata__xarray-4094/patch.diff",
+  "patch_sha256": "97eeb03714638cb26d29361c27a1f5bd9e6e4cb6fc31bcc03a83634bef1aff2c"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4970",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pylint-dev__pylint-4970/patch.diff",
+  "patch_sha256": "b2864da010c10e0ffa023f9dbe0d2d5d361d195194d3280b0ab3f1a6d6228985"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6386",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pylint-dev__pylint-6386/patch.diff",
+  "patch_sha256": "d139834fd58b9d97e89f5c8baa70ca5dafbf692d38a7e39688f81d263bc4a46f"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6528",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pylint-dev__pylint-6528/patch.diff",
+  "patch_sha256": "4b91395c7db56a37a194782f0d8b511993d40278ee33e462e0c0b53473683d50"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7080",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pylint-dev__pylint-7080/patch.diff",
+  "patch_sha256": "141a9c56f32d9a2ba1423fae6d1f39e987796d87680dd5fe138966ad80651a02"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7277",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pylint-dev__pylint-7277/patch.diff",
+  "patch_sha256": "8772998e27ff5259ac09cc7955e433173fba30fb106087210390b0c061b3628a"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10081",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pytest-dev__pytest-10081/patch.diff",
+  "patch_sha256": "e77c6fe1f2ae367dc7236286db4667910c5d0e145273cd920f593f951beda3f1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5262",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pytest-dev__pytest-5262/patch.diff",
+  "patch_sha256": "36b26be734356f1af5cb89378f7081a79d029ca81fcd07c812a769f47e545f57"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5631",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pytest-dev__pytest-5631/patch.diff",
+  "patch_sha256": "ce96c4a47fdcb42bd45d4b0c87208e0584d226e47bede01262b6e70b16077a33"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7205",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pytest-dev__pytest-7205/patch.diff",
+  "patch_sha256": "85f14bcb185cccab9417ff80d36ff727a93efab5c6229e57e6c4167e11699b03"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7236",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/pytest-dev__pytest-7236/patch.diff",
+  "patch_sha256": "d8e259f27195c405118ea29522b3c3682a48b576b94f8beb4e65af3012ed355c"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7432",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pytest-dev__pytest-7432/patch.diff",
+  "patch_sha256": "8c754d8662c1456a4973d43b9be6dc41ca2f8496fcc8d54111ef8268e084ee7c"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10908",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/scikit-learn__scikit-learn-10908/patch.diff",
+  "patch_sha256": "1f6d9a5ffd5622766052621b1c3b9c3a96e8832abcff17b89d16b1926aecfcab"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12682",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/scikit-learn__scikit-learn-12682/patch.diff",
+  "patch_sha256": "d9d5c7a0dd030385605bfbc879fd7af0d9bd225656c9b7ab6ab8b8941e499804"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12973",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/scikit-learn__scikit-learn-12973/patch.diff",
+  "patch_sha256": "ea04a68cbe2d8922a6fbb66ca23dfed00cb74fff214d240b1314f910b560b162"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-13124",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/scikit-learn__scikit-learn-13124/patch.diff",
+  "patch_sha256": "9950185853588a808ed674896981d5700f7ed414d05764acd75339126a27ba0c"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-14087",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/scikit-learn__scikit-learn-14087/patch.diff",
+  "patch_sha256": "8d23f0648556f3b171817d0592aa5de874f5f60d03359ca9adee25158e5b2e42"
+ },
+ {
+  "instance_id": "astropy__astropy-12907",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20241113_nebius-search-open-weight-models-11-24",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241113_nebius-search-open-weight-models-11-24/logs/astropy__astropy-12907/patch.diff",
+  "patch_sha256": "5c0c7232886f483e7ed809416d05f9d9bbb10fbdade342a8c6528f0233154bc9"
+ },
+ {
+  "instance_id": "astropy__astropy-13236",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/astropy__astropy-13236/patch.diff",
+  "patch_sha256": "01c54824573ddea3e1d2559dd4ffd36654763429a0fb05426dcd14ced6c1636a"
+ },
+ {
+  "instance_id": "astropy__astropy-13453",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/astropy__astropy-13453/patch.diff",
+  "patch_sha256": "a151fe322ba711dfa9690bf3f33e875cfadc518898cb873bddc4f493233d9d9f"
+ },
+ {
+  "instance_id": "astropy__astropy-13579",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/astropy__astropy-13579/patch.diff",
+  "patch_sha256": "5785e28bb7dee9c59cf1e8f0ea279f9570914d083ad478fc1193b368ef757bca"
+ },
+ {
+  "instance_id": "astropy__astropy-14182",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/astropy__astropy-14182/patch.diff",
+  "patch_sha256": "72ad6bb5c7ff0fd29ff24b686db10636ee05106b6d4e7abaabf2144950c0717e"
+ },
+ {
+  "instance_id": "astropy__astropy-14369",
+  "repo": "astropy/astropy",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/astropy__astropy-14369/patch.diff",
+  "patch_sha256": "775ae0d27dfc9215ea2cbe8e47df9aefeb5b951651eb2b3788808e5391718684"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-14623",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/matplotlib__matplotlib-14623/patch.diff",
+  "patch_sha256": "b3a28b5201690914e4ddc2e4b6b2a4745d153bc496d9f89ca59ece1e3585ef40"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20826",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/matplotlib__matplotlib-20826/patch.diff",
+  "patch_sha256": "d2a93843ac8384ebb7f41e282097010b7d5834d3b04c7b09b5e800c7b4b9063b"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20859",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/matplotlib__matplotlib-20859/patch.diff",
+  "patch_sha256": "9f552c3136253a487325b1378fb20dca16dea101099b124fa280447eafeebd3e"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-22865",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/matplotlib__matplotlib-22865/patch.diff",
+  "patch_sha256": "a702fff1618f4c3c313cf8f6f9612714ec0e2f8cd6738e71ad077496ca828f37"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23299",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/matplotlib__matplotlib-23299/patch.diff",
+  "patch_sha256": "8e916adb4eb1ab81f3486b45369afb6a29897c484f59623ee98843d361e926b0"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23314",
+  "repo": "matplotlib/matplotlib",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/matplotlib__matplotlib-23314/patch.diff",
+  "patch_sha256": "44ee53a2812aaad7f105a0e40f10b1001beb8f737bbb02febe78618c32a4b1ba"
+ },
+ {
+  "instance_id": "mwaskom__seaborn-3069",
+  "repo": "mwaskom/seaborn",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/mwaskom__seaborn-3069/patch.diff",
+  "patch_sha256": "2dac6e01704d885bc5b69fb492ae3831aeb3b09e63e229610331f3d76fa2e9b5"
+ },
+ {
+  "instance_id": "psf__requests-1142",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241113_nebius-search-open-weight-models-11-24",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241113_nebius-search-open-weight-models-11-24/logs/psf__requests-1142/patch.diff",
+  "patch_sha256": "e97a665b19298072460320f000e688d90dd2f2526cad88274535f608e35d407b"
+ },
+ {
+  "instance_id": "psf__requests-1724",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/psf__requests-1724/patch.diff",
+  "patch_sha256": "277cd0e36ed086f2af71dd61a9f498c4c1574cdd9b07521503cf483ec20e8163"
+ },
+ {
+  "instance_id": "psf__requests-1921",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/psf__requests-1921/patch.diff",
+  "patch_sha256": "7913acfbf31470a034904f672b314c03e672e8a8c799a483c7d0f186ac6de10d"
+ },
+ {
+  "instance_id": "psf__requests-2931",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/psf__requests-2931/patch.diff",
+  "patch_sha256": "b93787c1cee4f072fd01bdc55256699bcd1745007c8503bb8b751d7447dc73ec"
+ },
+ {
+  "instance_id": "psf__requests-5414",
+  "repo": "psf/requests",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/psf__requests-5414/patch.diff",
+  "patch_sha256": "dcf83e8bc84e74abfc732ce181fc4312ce206e7a75cad27161b727d9f689667d"
+ },
+ {
+  "instance_id": "pydata__xarray-2905",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/pydata__xarray-2905/patch.diff",
+  "patch_sha256": "df1f73296343ce3a5f9b82bc64080944ca8a559d0cf9b00a55c64e9fe61b239f"
+ },
+ {
+  "instance_id": "pydata__xarray-3095",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pydata__xarray-3095/patch.diff",
+  "patch_sha256": "3cf3516cdcf0bc5f3c2c29423746a51ef4ee0bbc50e133d257331cfb6a51240b"
+ },
+ {
+  "instance_id": "pydata__xarray-3151",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241113_nebius-search-open-weight-models-11-24",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241113_nebius-search-open-weight-models-11-24/logs/pydata__xarray-3151/patch.diff",
+  "patch_sha256": "d30581df272b45fbdb8ad77aeb11740037abcbb6e20577d47f7f7e449e438c9d"
+ },
+ {
+  "instance_id": "pydata__xarray-3305",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/pydata__xarray-3305/patch.diff",
+  "patch_sha256": "f844ad8fdc1acb9d07f5d03ccc46b00b72ce715d398d9cfd494875900b93daca"
+ },
+ {
+  "instance_id": "pydata__xarray-3993",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pydata__xarray-3993/patch.diff",
+  "patch_sha256": "bc93eb7c710ba408123416d165953b58aee972542bd8e1b3efe3c40a59d596e0"
+ },
+ {
+  "instance_id": "pydata__xarray-4094",
+  "repo": "pydata/xarray",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pydata__xarray-4094/patch.diff",
+  "patch_sha256": "06023c9bf40a519aefb3b87a851105014d53bf4036811661c9281455460c4719"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4970",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pylint-dev__pylint-4970/patch.diff",
+  "patch_sha256": "4f957df871977089ecbdd293defac11a06df4c1b09f810c9f4bde8d9b3283c7f"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6386",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pylint-dev__pylint-6386/patch.diff",
+  "patch_sha256": "187a1f8507164bc0758b1469d0eeb809b38a5289a90eb7030083ba340a9db22b"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6528",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/pylint-dev__pylint-6528/patch.diff",
+  "patch_sha256": "18b9ed3e6b893a0a0e3ead0aa09c493a1ac07e9c8cc0fffe4e29b6c4698d0517"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7080",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pylint-dev__pylint-7080/patch.diff",
+  "patch_sha256": "cdbe5b841546fd2300c67cb4eacfc5bd139cde772ca92cd5ac49593a75e42833"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7277",
+  "repo": "pylint-dev/pylint",
+  "kind": "wrong",
+  "agent": "20250225_sweagent_claude-3-7-sonnet",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20250225_sweagent_claude-3-7-sonnet/logs/pylint-dev__pylint-7277/patch.diff",
+  "patch_sha256": "1e62c527fa9e3a5e753b3c2deca37b4726de20c5598e9a4cafdd6db231ab4ca2"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10081",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pytest-dev__pytest-10081/patch.diff",
+  "patch_sha256": "b1de2eb06ba4528825df8266a86bb149fc0b2c351bfc63749d1bb3a08d162547"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5262",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pytest-dev__pytest-5262/patch.diff",
+  "patch_sha256": "3abe7e87dc7ed0c1d6d50438bb24b31ec0914c2d1e6c91ae4b7fd9a0d13ea9e9"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5631",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/pytest-dev__pytest-5631/patch.diff",
+  "patch_sha256": "1a3c65ce9c35aa765e54ffa1695d725930a10d514deb91c42e5b0477e7120c63"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7205",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/pytest-dev__pytest-7205/patch.diff",
+  "patch_sha256": "d2d852e9d9afe8d60554e03d4ff250fb41234d5b112ff6bf398c05b561db9e71"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7236",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/pytest-dev__pytest-7236/patch.diff",
+  "patch_sha256": "5e49fd20713af01ba841c41d76cfe4902d496348bb2e246a55911773cf6b8639"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7432",
+  "repo": "pytest-dev/pytest",
+  "kind": "wrong",
+  "agent": "20241113_nebius-search-open-weight-models-11-24",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241113_nebius-search-open-weight-models-11-24/logs/pytest-dev__pytest-7432/patch.diff",
+  "patch_sha256": "e9554e29869cc16f8e1f5ec4803b623bc849ca5ffb45e73eb89435df6b6eda8d"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10908",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/scikit-learn__scikit-learn-10908/patch.diff",
+  "patch_sha256": "7827e6844d7b7d9f582d516169197678ab10387494c41f7ddc6cb5c220a335c7"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12682",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/scikit-learn__scikit-learn-12682/patch.diff",
+  "patch_sha256": "3526a917d5af81412a51561c8827419b8a932b9634f7c123f5483c45825f2f78"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12973",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/scikit-learn__scikit-learn-12973/patch.diff",
+  "patch_sha256": "5855c74881654ec0c790c5ff31a85341cd3e09ff9f589882d0cb05b8acfb8fde"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-13124",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/scikit-learn__scikit-learn-13124/patch.diff",
+  "patch_sha256": "eff7eba4b9420f1a0bd66b10821aedc99b0aa7795ed43bc808d9a5dd3181bd23"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-14087",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "wrong",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": false,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/scikit-learn__scikit-learn-14087/patch.diff",
+  "patch_sha256": "982165c022c5fbf22fcde8208fb45c86fda11b9c3a022b9b8e790513a140e7e8"
+ },
+ {
+  "instance_id": "astropy__astropy-12907",
+  "repo": "astropy/astropy",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/astropy__astropy-12907/patch.diff",
+  "patch_sha256": "2594deb51e462a5dda5f669aaba17ef818c0c109f512cf60d4dabdf4c425ba72"
+ },
+ {
+  "instance_id": "astropy__astropy-13236",
+  "repo": "astropy/astropy",
+  "kind": "right",
+  "agent": "20250410_cortexa",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20250410_cortexa/logs/astropy__astropy-13236/patch.diff",
+  "patch_sha256": "9456c823809a73a5694b94709e161843d13b9b41c8ab12f428f29ba007bc098d"
+ },
+ {
+  "instance_id": "astropy__astropy-13453",
+  "repo": "astropy/astropy",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/astropy__astropy-13453/patch.diff",
+  "patch_sha256": "e3fe56808b03cfa50a0b99be49c19718967f96bf58d84c30dbdfa3726d2cf873"
+ },
+ {
+  "instance_id": "astropy__astropy-13579",
+  "repo": "astropy/astropy",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/astropy__astropy-13579/patch.diff",
+  "patch_sha256": "05abd6865f4674565896fbf55757a84a4bc1aa194f7a980a5cad431a67b1e2c0"
+ },
+ {
+  "instance_id": "astropy__astropy-14182",
+  "repo": "astropy/astropy",
+  "kind": "right",
+  "agent": "20250225_sweagent_claude-3-7-sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20250225_sweagent_claude-3-7-sonnet/logs/astropy__astropy-14182/patch.diff",
+  "patch_sha256": "e001d6531f00b56a2e8e7a14466023a923f6fa877960eb795b332ab2c3cf3185"
+ },
+ {
+  "instance_id": "astropy__astropy-14369",
+  "repo": "astropy/astropy",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/astropy__astropy-14369/patch.diff",
+  "patch_sha256": "fba70bd53ce36b73d046cdb5461ed9ae963d982a9a79cebdfe2fd9e3ff1bc0bb"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-14623",
+  "repo": "matplotlib/matplotlib",
+  "kind": "right",
+  "agent": "20250225_sweagent_claude-3-7-sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20250225_sweagent_claude-3-7-sonnet/logs/matplotlib__matplotlib-14623/patch.diff",
+  "patch_sha256": "c1f5c805aa1af932afbe19808233a8683711e18ca4ac113c53dbe7353cec26d5"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20826",
+  "repo": "matplotlib/matplotlib",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/matplotlib__matplotlib-20826/patch.diff",
+  "patch_sha256": "4569bf34d006fe1bccad40df196f4331618838df1834ce2cb2b19cb698cff95a"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20859",
+  "repo": "matplotlib/matplotlib",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/matplotlib__matplotlib-20859/patch.diff",
+  "patch_sha256": "94a24c48573f2ab348f1eede0a00d89f42db41968e2046c716748f31fba09449"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-22865",
+  "repo": "matplotlib/matplotlib",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/matplotlib__matplotlib-22865/patch.diff",
+  "patch_sha256": "a397810d03bae9e4d6b3cda6bc49afbfc56da91b15545bb5fabb7f3a05eaf2d1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23299",
+  "repo": "matplotlib/matplotlib",
+  "kind": "right",
+  "agent": "20250410_cortexa",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20250410_cortexa/logs/matplotlib__matplotlib-23299/patch.diff",
+  "patch_sha256": "81d63937279460c161e9c98af05c3ccb2c13e7ebaaa946584c3a1e7353e5ab83"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23314",
+  "repo": "matplotlib/matplotlib",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/matplotlib__matplotlib-23314/patch.diff",
+  "patch_sha256": "320a056749da0554f49d26e9440d2e2c98e86e71e5ab6d03108ab8a8477f1845"
+ },
+ {
+  "instance_id": "mwaskom__seaborn-3069",
+  "repo": "mwaskom/seaborn",
+  "kind": "right",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/mwaskom__seaborn-3069/patch.diff",
+  "patch_sha256": "5c5f4553816d954fdf81ab531b9f15df2ca2bad3c5751079b5d3ebfff60bf8a5"
+ },
+ {
+  "instance_id": "psf__requests-1142",
+  "repo": "psf/requests",
+  "kind": "right",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/psf__requests-1142/patch.diff",
+  "patch_sha256": "82193a2a613a8410744e6d7b549134f6b2b2d19c7ceec68d9426eaaef437ad13"
+ },
+ {
+  "instance_id": "psf__requests-1724",
+  "repo": "psf/requests",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/psf__requests-1724/patch.diff",
+  "patch_sha256": "a89ae9284b295cf0dc8acbdd04846bf965425f52739dd93b144e9683d27696c8"
+ },
+ {
+  "instance_id": "psf__requests-1921",
+  "repo": "psf/requests",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/psf__requests-1921/patch.diff",
+  "patch_sha256": "d1519a25100567d6f55b898ae2bad3e58611b833f2e78b44021dd499464f1461"
+ },
+ {
+  "instance_id": "psf__requests-2931",
+  "repo": "psf/requests",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/psf__requests-2931/patch.diff",
+  "patch_sha256": "e5b7944297eb7788471b1d8938b7a0f83bf4269de9cd05b301dd72c70f2dc06f"
+ },
+ {
+  "instance_id": "psf__requests-5414",
+  "repo": "psf/requests",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/psf__requests-5414/patch.diff",
+  "patch_sha256": "bbf5fe23c1852feace451a943c73612568ce54c4f7cdd1c279451840cadfc9c0"
+ },
+ {
+  "instance_id": "pydata__xarray-2905",
+  "repo": "pydata/xarray",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pydata__xarray-2905/patch.diff",
+  "patch_sha256": "4d71f8ec2bf21e82daf16605441078a985c72abeff79eb151722790a25bdeb68"
+ },
+ {
+  "instance_id": "pydata__xarray-3095",
+  "repo": "pydata/xarray",
+  "kind": "right",
+  "agent": "20241113_nebius-search-open-weight-models-11-24",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241113_nebius-search-open-weight-models-11-24/logs/pydata__xarray-3095/patch.diff",
+  "patch_sha256": "2c37082341fa7b751424f055fe9d716f5f6f90dc34f3eca569040758f57993b7"
+ },
+ {
+  "instance_id": "pydata__xarray-3151",
+  "repo": "pydata/xarray",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pydata__xarray-3151/patch.diff",
+  "patch_sha256": "10d67f8e6f93a5c0305c347b23492f1407ff9b8458f90d21667cb2c1ddb86d12"
+ },
+ {
+  "instance_id": "pydata__xarray-3305",
+  "repo": "pydata/xarray",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pydata__xarray-3305/patch.diff",
+  "patch_sha256": "0a1aebf75766b62c5a86c3e3bd8cd646ac2d76432040728a5fde13057cc48dd1"
+ },
+ {
+  "instance_id": "pydata__xarray-3993",
+  "repo": "pydata/xarray",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/pydata__xarray-3993/patch.diff",
+  "patch_sha256": "4ac54b5553335fff04652ae538a6bad995e32db805a6e61dc3f185841fe46a5e"
+ },
+ {
+  "instance_id": "pydata__xarray-4094",
+  "repo": "pydata/xarray",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/pydata__xarray-4094/patch.diff",
+  "patch_sha256": "fbbe381e01169c8109c07e93573d2d0a22ac46078b334a8ba34eb8ee3797b047"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4970",
+  "repo": "pylint-dev/pylint",
+  "kind": "right",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/pylint-dev__pylint-4970/patch.diff",
+  "patch_sha256": "033fd6093045962ead7466f5d2cb15b6cd95b8002742a0c78f48bddd23a88926"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6386",
+  "repo": "pylint-dev/pylint",
+  "kind": "right",
+  "agent": "20250225_sweagent_claude-3-7-sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20250225_sweagent_claude-3-7-sonnet/logs/pylint-dev__pylint-6386/patch.diff",
+  "patch_sha256": "9ce040ec16a9bd7414f7b8c1f66f6ba0f1a953e4298883df21fdaf6f80054dda"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6528",
+  "repo": "pylint-dev/pylint",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pylint-dev__pylint-6528/patch.diff",
+  "patch_sha256": "a36bfeb61eb81e56748fe16d897890e192987e136a0899ee506a4312377ef4ad"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7080",
+  "repo": "pylint-dev/pylint",
+  "kind": "right",
+  "agent": "20250225_sweagent_claude-3-7-sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20250225_sweagent_claude-3-7-sonnet/logs/pylint-dev__pylint-7080/patch.diff",
+  "patch_sha256": "69589832cbb3c256dc3cd61b6dc3fcf777e7c1b5546512f327456c13b4173937"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7277",
+  "repo": "pylint-dev/pylint",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pylint-dev__pylint-7277/patch.diff",
+  "patch_sha256": "442e6b1b51792bbc284e29d23f7938058de5340fd21a36c21561440af9381892"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10081",
+  "repo": "pytest-dev/pytest",
+  "kind": "right",
+  "agent": "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241029_OpenHands-CodeAct-2.1-sonnet-20241022/logs/pytest-dev__pytest-10081/patch.diff",
+  "patch_sha256": "f3bea09d6eb2071b8cf4913b3ff0d8798c2572f67026eac45607e207f231d683"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5262",
+  "repo": "pytest-dev/pytest",
+  "kind": "right",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/pytest-dev__pytest-5262/patch.diff",
+  "patch_sha256": "deea99d37e52c62f0e9c35f1cf60730fbaed09b9f655f9871da75d0dcc7d7121"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5631",
+  "repo": "pytest-dev/pytest",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pytest-dev__pytest-5631/patch.diff",
+  "patch_sha256": "2e383d375b807b3f84c858e7d3ba60c268297b7f941eb50aa9688f6a3ae72f34"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7205",
+  "repo": "pytest-dev/pytest",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pytest-dev__pytest-7205/patch.diff",
+  "patch_sha256": "63ef5575c1cdda4b17a59857c7514383315c2b3df9526c742bddfe0cd531b439"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7236",
+  "repo": "pytest-dev/pytest",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/pytest-dev__pytest-7236/patch.diff",
+  "patch_sha256": "b5377afcf35e59f07e8a917af262f618aee1a1ac824afa6bd8e5941143d295d2"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7432",
+  "repo": "pytest-dev/pytest",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/pytest-dev__pytest-7432/patch.diff",
+  "patch_sha256": "0256c1624f911924c0fe23c2b981a7260a8f9deba6e3bb714cf377eeb810dbeb"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10908",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "right",
+  "agent": "20241028_agentless-1.5_gpt4o",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241028_agentless-1.5_gpt4o/logs/scikit-learn__scikit-learn-10908/patch.diff",
+  "patch_sha256": "245024a82439319b6c3d46c72928ba57267efd21bc66b172f7469a81c414d57e"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12682",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "right",
+  "agent": "20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20241108_autocoderover-v2.0-claude-3-5-sonnet-20241022/logs/scikit-learn__scikit-learn-12682/patch.diff",
+  "patch_sha256": "b50fd26654224ccd636a3c6f14585986f7151e4d928a0219e6aac54dc2d4464c"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12973",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/scikit-learn__scikit-learn-12973/patch.diff",
+  "patch_sha256": "5c419ecd9d0005a5e852d7200f99b7aea999530126e49f4dfe14c39487c561d3"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-13124",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/scikit-learn__scikit-learn-13124/patch.diff",
+  "patch_sha256": "eaa371fc14ce2443bf83a28617b5e0c29648ffb5c0039e4587aceaaf54cf5072"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-14087",
+  "repo": "scikit-learn/scikit-learn",
+  "kind": "right",
+  "agent": "20240620_sweagent_claude3.5sonnet",
+  "fixed": true,
+  "patch_url": "https://swe-bench-submissions.s3.amazonaws.com/verified/20240620_sweagent_claude3.5sonnet/logs/scikit-learn__scikit-learn-14087/patch.diff",
+  "patch_sha256": "ef55d702d793662117bcc1efb20a037dd0522eb0b37d4fed769a7e19b1cb8ccf"
+ }
+]
