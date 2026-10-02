@@ -8,15 +8,13 @@ table is reported in tokens only.
 """
 import argparse
 import json
+import sys
 import urllib.request
 from pathlib import Path
 
-# tokenfactory.nebius.com/model-catalog.md, read 1 October 2026
-PRICES: dict[str, tuple[float, float]] = {
-    "NVIDIA-Nemotron-3-Nano-30B-A3B": (0.06, 0.24),
-    "nemotron-3-super-120b-a12b": (0.30, 0.90),
-    "Nemotron-3-Ultra-550b-a55b": (1.00, 3.00),
-}
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from receipts.evaluation import PRICES  # noqa: E402
 
 
 def load(ref: str, api: str | None) -> dict:

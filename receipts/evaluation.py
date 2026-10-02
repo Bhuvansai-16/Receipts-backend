@@ -3,16 +3,28 @@
 Pure functions here; scripts/eval_*.py do the downloads and the LangSmith calls. SWE-bench's hidden tests only
 label the patches (fixed or not); Receipts never sees them.
 """
+import asyncio
 import hashlib
+import json
 import re
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
 
+from . import db, engine, swebench
+
 GOLD_URL = "swebench:gold"
 NONE_URL = "none"
+# tokenfactory.nebius.com/model-catalog.md, read 1 October 2026: USD per million tokens (input, output)
+PRICES: dict[str, tuple[float, float]] = {
+    "NVIDIA-Nemotron-3-Nano-30B-A3B": (0.06, 0.24),
+    "nemotron-3-super-120b-a12b": (0.30, 0.90),
+    "Nemotron-3-Ultra-550b-a55b": (1.00, 3.00),
+}
 
 
 @dataclass(frozen=True)
@@ -131,3 +143,45 @@ def reader_prompt(issue: str, diff: str) -> str:
     return ("You review a pull request. Read the issue and the diff, and say whether the diff fixes the issue as "
             "described: fixed, not_fixed, or unsure. Give the reason in one or two sentences.\n\n"
             f"Issue:\n{issue[:8000]}\n\nDiff:\n{diff[:DIFF_LIMIT - 9000]}")
+
+
+def cost_usd(tokens: dict | None) -> float:
+    """Model cost of one check at list prices, from the evidence's usage by model."""
+    total = 0.0
+    for name, u in (tokens or {}).items():
+        price_in, price_out = PRICES.get(name.split("/")[-1], (0.0, 0.0))
+        total += (int(u.get("input_tokens") or 0) * price_in + int(u.get("output_tokens") or 0) * price_out) / 1e6
+    return round(total, 5)
+
+
+def case_of(inputs: dict) -> Case:
+    return Case(inputs["instance_id"], inputs.get("repo", ""), inputs["kind"], inputs.get("agent", ""), False,
+                inputs.get("patch_url", ""), inputs.get("patch_sha256", ""))
+
+
+class Harness:
+    """The pipeline as a LangSmith target: one row is one patch. An issue's rows run one after another and share
+    one store, so the first writes the blind test and the others reuse it (it never depends on the patch)."""
+
+    def __init__(self, load_patch: Callable[[dict], str], out_dir: Path):
+        self.load_patch, self.out_dir = load_patch, Path(out_dir)
+        self.store = db.MemoryRuns()
+        self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+    async def __call__(self, inputs: dict) -> dict:
+        case = case_of(inputs)
+        async with self.locks[case.instance_id]:
+            try:
+                inst = swebench.load_instance(case.instance_id)
+                patch = (inst.gold_patch if case.kind == "gold" else None if case.kind == "none"
+                         else self.load_patch(inputs))
+                ev = await engine.check(inst, patch, tests=self.store, run_id=case.run_id)
+            except Exception as e:  # the harness's own failure: scored as not checked
+                ev = {"instance_id": case.instance_id, "verdict": None, "reason": f"{type(e).__name__}: {e}"}
+        ev.update(run_id=case.run_id, pr={"gold": "gold", "none": "none"}.get(case.kind, "diff"))
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        (self.out_dir / f"{case.run_id}.json").write_text(json.dumps(ev, default=str), encoding="utf-8")
+        return {"run_id": case.run_id, "verdict": ev.get("verdict"), "reason": ev.get("reason"),
+                "seconds": ev.get("seconds"), "cost_usd": cost_usd(ev.get("tokens")),
+                "tokens": sum(int(u.get("total_tokens") or 0) for u in (ev.get("tokens") or {}).values()),
+                "reused": bool((ev.get("writer") or {}).get("reused_from"))}

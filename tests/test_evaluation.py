@@ -71,3 +71,33 @@ def test_summary_rates_are_means_over_rows_that_have_the_key():
 def test_reader_prompt_truncates_the_diff():
     p = E.reader_prompt("issue text", "x" * 50_000)
     assert "issue text" in p and len(p) < 32_000
+
+
+def test_an_issues_cases_run_one_after_another_and_share_the_store(monkeypatch, tmp_path):
+    import asyncio
+    from types import SimpleNamespace
+
+    spans, stores = [], set()
+
+    async def check(inst, patch, emit=None, *, tests=None, run_id=None):
+        stores.add(id(tests))
+        start = len(spans)
+        spans.append(("start", run_id))
+        await asyncio.sleep(0.05)
+        spans.append(("end", run_id))
+        return {"verdict": "PROVEN", "reason": "r", "seconds": 1.0,
+                "tokens": {"m/nemotron-3-super-120b-a12b": {"input_tokens": 1000, "output_tokens": 100}},
+                "writer": {"reused_from": "x"} if start else {}}
+
+    monkeypatch.setattr(E.engine, "check", check)
+    monkeypatch.setattr(E.swebench, "load_instance", lambda iid: SimpleNamespace(gold_patch="GOLD"))
+    harness = E.Harness(load_patch=lambda inputs: "diff", out_dir=tmp_path)
+    rows = [{"instance_id": "o__r-1", "kind": k, "agent": "", "patch_url": "", "patch_sha256": ""} for k in ("gold", "none")]
+
+    async def both():
+        return await asyncio.gather(*(harness(r) for r in rows))
+
+    outs = asyncio.run(both())
+    assert [s[0] for s in spans] == ["start", "end", "start", "end"] and len(stores) == 1
+    assert outs[0]["verdict"] == "PROVEN" and outs[1]["reused"] is True and outs[0]["cost_usd"] > 0
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["eval-o__r-1-gold.json", "eval-o__r-1-none.json"]
