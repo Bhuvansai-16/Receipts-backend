@@ -148,8 +148,9 @@ printf 'NEBIUS_API_KEY=...\nCONTREE_PROJECT=...\n' > .env   # your Token Factory
 python -m receipts run psf__requests-1142 --patch none
 ```
 
-This checks a pull request that changes nothing against a real requests bug: expect REFUTED in about a minute
-(the first run also downloads SWE-bench Verified). `--patch gold` checks the real fix (PROVEN), and
+This checks a pull request that changes nothing against a real requests bug: expect REFUTED. On a clean machine
+with only these two settings it took 1.5 minutes the first time, which includes downloading SWE-bench Verified;
+the check itself took 40 s and 17K tokens. `--patch gold` checks the real fix (PROVEN), and
 `--patch my.diff` your own diff. Optional settings: `TAVILY_API_KEY` adds the research brief,
 `LANGSMITH_API_KEY` traces every step. The receipt is saved as JSON in `runs/`.
 
