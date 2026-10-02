@@ -17,7 +17,7 @@ from langsmith import traceable
 from pydantic import BaseModel
 
 from . import config, research
-from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
+from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files, text_part
 from .swebench import Instance
 from .verdict import (MIXED, PytestRun, Verdict, fix_verdict, partial_fix, repro_check, reproduces, restrict,
                       suite_candidates)
@@ -298,6 +298,10 @@ async def _checked(inst, patch, ev, say, tests, run_id, key, env, stored, setup)
     say("test_accepted", {"attempts": w.attempts, **({"reused_from": reused} if reused else {})})
 
     test = {TEST_PATH: w.test_code.encode()}
+    if patch is not None:
+        patch, skipped = text_part(patch)
+        if skipped:
+            ev["binary_files_skipped"] = skipped
     pr = base if patch is None else await apply_patch(base, patch)
     n, p2p = config.VERDICT_RUNS, inst.pass_to_pass
     # by file: one PASS_TO_PASS id missing at base would abort a nodeid run. Real repos name files directly.

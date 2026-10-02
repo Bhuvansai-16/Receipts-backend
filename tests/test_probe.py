@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeImage
-from receipts.sandbox import MARKER, apply_patch, parse_probe_output, run_pytest, suite_files
+from receipts.sandbox import MARKER, apply_patch, parse_probe_output, run_pytest, suite_files, text_part
 
 PROBE_DIR = Path(__file__).resolve().parent.parent / "receipts"
 
@@ -106,6 +106,14 @@ def test_apply_patch_never_fuzzes():
     img = FakeImage(exit_code=1)
     assert asyncio.run(apply_patch(img, "diff")) is None
     assert "fuzz" not in img.calls[0]["shell"] and img.calls[0]["disposable"] is False
+
+
+def test_text_part_drops_binary_files_that_carry_no_data():
+    text = "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-a\n+b\n"
+    png = "diff --git a/i.png b/i.png\nnew file mode 100644\nindex 0..f\nBinary files /dev/null and b/i.png differ\n"
+    full = "diff --git a/j.png b/j.png\nnew file mode 100644\nindex 0..f\nGIT binary patch\nliteral 3\nKcmZ?\n\n"
+    assert text_part(png + text + full) == (text + full, ["i.png"])
+    assert text_part(text) == (text, [])
 
 
 def test_suite_files():
