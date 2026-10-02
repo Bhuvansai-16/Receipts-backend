@@ -112,7 +112,7 @@ async def classify(issue: str, patch: str) -> Claim:
 
 
 def judge_prompt(issue: str, test_code: str, base_output: str) -> str:
-    # Eval baseline: 7 of 200 real fixes were refuted by tests this check passed. Some failed on an unrelated
+    # Eval baseline: 7 of 79 real fixes were refuted by tests this check passed. Some failed on an unrelated
     # environment error (pylint #4970, #6386), others asserted an internal detail (matplotlib #23314:
     # ax.patch visibility, where the fix skips drawing) or a parameter name the issue never fixed.
     return (
