@@ -172,3 +172,35 @@ load leave the writer without skills. None of them can produce a verdict on its 
 2. Push the backend; Render rebuilds the smaller image and restarts.
 3. Push the frontend; Vercel deploys the reuse display.
 4. Record the measured results at the end of this document.
+
+## Results (2 October 2026)
+
+**Writer overhead per turn** (system prompt plus tool definitions, offline, stub model): 14,857 characters with
+10 tools before; 9,898 characters with 8 tools after (-33%, about 3,700 to about 2,450 tokens). `task` and
+`delete` are gone; the skills list adds about 1,000 characters.
+
+**Credit, the six demo cases, writer only** (no reuse; Token Factory list prices from
+tokenfactory.nebius.com/model-catalog.md: Nano $0.06/$0.24, Super $0.30/$0.90, Ultra $1/$3 per million tokens
+in/out; `scripts/usage_report.py`):
+
+| | Before (Phase 1 runs, 1 Oct) | After (2 Oct) | Change |
+|---|---|---|---|
+| Tokens, six checks | 355,938 | 169,862 | -52% |
+| Model cost, six checks | $0.139 | $0.080 | -42% |
+| Per check | 59.3K tokens, $0.023, 58 s | 28.3K tokens, $0.013, 48 s | |
+| Writer (Super) input tokens | 299,287 | 119,366 | -60% |
+| Verdicts | 2 PROVEN, 4 REFUTED | the same six | |
+
+The writer read no skill in these six (simple issues; it used execute, ls, write_file and submit_test only), so
+the saving comes from the leaner tools: smaller definitions on every turn and fewer turns (19 tool calls across
+the six checks, against 40 shell commands before). Six runs per side is a small sample; model runs vary.
+
+**Reuse** (local API on Neon): xarray 4629's real fix wrote its test (PROVEN, 42.9 s, 30.8K tokens); the empty
+patch then reused it: REFUTED in 18.9 s with 7.7K tokens and $0.004 (Phase 1: 49.7 s, 55.2K tokens, $0.022),
+no writer model call; the second opinion still ran, as Refuted requires. The receipt reads "Blind test: reused"
+and links to the check that wrote it.
+
+**Kept environments**: the same pull request (receipts-demo-sympy #30) checked in two processes; the first built
+the environment (ready at 38.0 s), the second found it by tag (ready at 7.0 s). Both PROVEN.
+
+**Not measured here**: the Docker image size (no Docker locally; Render builds it on deploy).
