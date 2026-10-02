@@ -237,3 +237,11 @@ def test_blind_tests_keep_the_first_save_and_can_be_forgotten(store, run):
         return first, await store.get_blind_test("k")
     first, gone = run(go())
     assert (first["run_id"], first["test_code"]) == ("r1", "def test_a(): assert 0") and gone is None
+
+
+def test_eval_receipts_are_owned_by_eval_and_listed_in_no_gallery(store, run):
+    async def go():
+        await store.import_run("eval-x__y-1-gold", EVIDENCE, user_id="eval")
+        return await store.get("eval-x__y-1-gold"), await store.list_for_user("demo", 50)
+    row, demo = run(go())
+    assert row["user_id"] == "eval" and row["evidence"]["verdict"] == "PROVEN" and demo == []

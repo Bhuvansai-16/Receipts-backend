@@ -36,12 +36,13 @@ def _run_async(coro):
     return asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop if sys.platform == "win32" else None)
 
 
-async def _import_runs() -> int:
+async def _import_runs(eval_dir: str | None = None) -> int:
     from . import db
 
     pool = await db.open_pool(config.DATABASE_URL)
     try:
-        return await db.import_runs(db.PgRuns(pool), config.RUNS_DIR)
+        store = db.PgRuns(pool)
+        return await (db.import_eval(store, Path(eval_dir)) if eval_dir else db.import_runs(store, config.RUNS_DIR))
     finally:
         await pool.close()
 
@@ -66,10 +67,12 @@ def main() -> None:
     v.add_argument("--port", type=int, help="default: $PORT (Cloud Run), else 8000")
     sub.add_parser("migrate", help="apply database migrations (uses DATABASE_URL_UNPOOLED)")
     sub.add_parser("import-runs", help="load runs/*.json into the database as public example receipts")
+    ie = sub.add_parser("import-eval", help="publish an evaluation's receipts (owner 'eval', in no gallery)")
+    ie.add_argument("eval_dir", help="runs/eval/<experiment>")
     a = ap.parse_args()
     if a.cmd == "smoke":
         return asyncio.run(smoke(a.instance))
-    if a.cmd in ("migrate", "import-runs"):
+    if a.cmd in ("migrate", "import-runs", "import-eval"):
         if not config.DATABASE_URL:
             sys.exit("error: set DATABASE_URL (and DATABASE_URL_UNPOOLED) in .env first")
         if a.cmd == "migrate":
@@ -77,7 +80,7 @@ def main() -> None:
 
             applied = _run_async(db.migrate(config.DATABASE_URL_UNPOOLED))
             return print(f"applied: {', '.join(applied) or 'nothing new'}")
-        return print(f"imported {_run_async(_import_runs())} runs")
+        return print(f"imported {_run_async(_import_runs(getattr(a, 'eval_dir', None)))} runs")
     if a.cmd == "serve":
         import uvicorn
 

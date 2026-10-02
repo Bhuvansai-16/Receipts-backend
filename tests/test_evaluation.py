@@ -101,3 +101,28 @@ def test_an_issues_cases_run_one_after_another_and_share_the_store(monkeypatch, 
     assert [s[0] for s in spans] == ["start", "end", "start", "end"] and len(stores) == 1
     assert outs[0]["verdict"] == "PROVEN" and outs[1]["reused"] is True and outs[0]["cost_usd"] > 0
     assert sorted(p.name for p in tmp_path.iterdir()) == ["eval-o__r-1-gold.json", "eval-o__r-1-none.json"]
+
+
+def _row(repo, fixed, verdict, answer=None, reason="r", kind="wrong"):
+    return {"run_id": f"eval-{repo}-{kind}", "instance_id": repo + "-1", "repo": repo, "kind": kind, "agent": "a",
+            "fixed": fixed, "verdict": verdict, "reason": reason, "cost_usd": 0.01, "seconds": 20.0,
+            "reused": True, "reader_answer": answer, "reader_reason": "x"}
+
+
+def test_report_scores_receipts_and_the_reader_and_lists_the_misses():
+    rows = [_row("o/a", False, "REFUTED", "fixed"), _row("o/a", False, "PROVEN", "not_fixed"),
+            _row("o/b", True, "PROVEN", "fixed"),
+            _row("o/b", True, "UNPROVEN", "unsure", reason="no valid reproducing test after 5 attempt(s): x")]
+    rep = E.report(rows)
+    assert rep["receipts"]["caught"] == 0.5 and rep["receipts"]["false_proven"] == 0.5
+    assert rep["receipts"]["proven_fix"] == 0.5 and rep["receipts"]["false_refuted"] == 0.0
+    assert rep["reader"]["false_accept"] == 0.5 and rep["reader"]["accepted_fix"] == 0.5
+    assert [m["verdict"] for m in rep["misses"]] == ["PROVEN"] and len(rep["reader_false_accepts"]) == 1
+    assert rep["unproven_reasons"] == {"no valid test": 1} and set(rep["per_repo"]) == {"o/a", "o/b"}
+    assert "Catch rate" in E.markdown(rep, {})
+
+
+def test_find_secrets_names_what_it_found_without_repeating_it():
+    assert E.find_secrets("clean text with a sk- prefix but nothing more", ["supersecretvalue"]) == []
+    found = E.find_secrets("token supersecretvalue and ghp_" + "a" * 36, ["supersecretvalue"])
+    assert found == ["a configured secret value", "a GitHub token"] and "supersecret" not in " ".join(found)

@@ -154,6 +154,98 @@ def cost_usd(tokens: dict | None) -> float:
     return round(total, 5)
 
 
+RECEIPT_KEYS = ["caught", "false_proven", "proven_fix", "false_refuted", "unproven"]
+READER_KEYS = ["accepted_fix", "false_reject", "rejected_wrong", "false_accept", "unsure"]
+_REASONS = [("no valid reproducing test", "no valid test"), ("does not reproduce", "test didn't reproduce on base"),
+            ("flaky", "flaky base runs"), ("patch does not apply", "patch didn't apply"),
+            ("mixed or fail differently", "mixed runs"), ("model was unavailable", "model outage"),
+            ("second opinion doubts", "second opinion doubted the test"), ("did not run on the PR", "PR runs didn't run"),
+            ("could not run", "existing tests couldn't run"), ("classified as", "no checkable claim")]
+
+
+def reason_group(reason: str | None) -> str:
+    text = reason or ""
+    return next((name for needle, name in _REASONS if needle in text), "other: " + text[:40])
+
+
+def _median(values: list[float]) -> float:
+    v = sorted(values)
+    return round((v[len(v) // 2] + v[(len(v) - 1) // 2]) / 2, 4) if v else 0.0
+
+
+def report(rows: list[dict]) -> dict:
+    """Headline rates for Receipts and the reader, per repository, cost and time, and every miss."""
+    scores = [row_scores(r["fixed"], r["verdict"]) for r in rows]
+    read = [(r, reader_scores(r["fixed"], r["reader_answer"])) for r in rows if r.get("reader_answer")]
+    per_repo: dict[str, list[dict]] = {}
+    for r, s in zip(rows, scores):
+        per_repo.setdefault(r["repo"], []).append(s)
+    unproven: dict[str, int] = {}
+    for r, s in zip(rows, scores):
+        if s["unproven"]:
+            g = reason_group(r.get("reason"))
+            unproven[g] = unproven.get(g, 0) + 1
+    return {
+        "issues": len({r["instance_id"] for r in rows}), "cases": len(rows), "fixed": sum(bool(r["fixed"]) for r in rows),
+        "receipts": summary(scores, RECEIPT_KEYS), "reader": summary([s for _, s in read], READER_KEYS) if read else {},
+        "cost_usd": {"total": round(sum(r.get("cost_usd") or 0 for r in rows), 3),
+                     "median": _median([r.get("cost_usd") or 0 for r in rows])},
+        "seconds_median": _median([r.get("seconds") or 0 for r in rows]),
+        "reused_share": round(sum(bool(r.get("reused")) for r in rows) / len(rows), 4) if rows else 0.0,
+        "per_repo": {repo: {"cases": len(v), **summary(v, RECEIPT_KEYS)} for repo, v in sorted(per_repo.items())},
+        "unproven_reasons": dict(sorted(unproven.items(), key=lambda kv: -kv[1])),
+        "misses": [r for r, s in zip(rows, scores) if s.get("false_proven") or s.get("false_refuted")],
+        "reader_false_accepts": [r for r, s in read if s.get("false_accept")],
+    }
+
+
+def _pct(x: float) -> str:
+    return f"{round(x * 100)}%"
+
+
+def markdown(rep: dict, links: dict) -> str:
+    """eval/RESULTS.md from a report; links: {"dataset": public LangSmith URL, "site": the app's origin}."""
+    r, d, site = rep["receipts"], rep.get("reader") or {}, links.get("site", "")
+    lines = [
+        "# Receipts against SWE-bench Verified's answer key", "",
+        f"{rep['issues']} issues, {rep['cases']} patches ({rep['fixed']} fix the issue, {rep['cases'] - rep['fixed']} "
+        "don't, by SWE-bench's hidden tests, which Receipts never sees).", "",
+        "| | Receipts (runs the blind test) | Nemotron Ultra reading the diff |", "|---|---|---|",
+        f"| Catch rate: wrong patches flagged | {_pct(r['caught'])} | {_pct(d.get('rejected_wrong', 0))} |",
+        f"| Wrong patches passed as fixes | {_pct(r['false_proven'])} | {_pct(d.get('false_accept', 0))} |",
+        f"| Real fixes confirmed | {_pct(r['proven_fix'])} | {_pct(d.get('accepted_fix', 0))} |",
+        f"| Real fixes rejected | {_pct(r['false_refuted'])} | {_pct(d.get('false_reject', 0))} |",
+        f"| No answer (Unproven / unsure) | {_pct(r['unproven'])} | {_pct(d.get('unsure', 0))} |", "",
+        f"Cost: ${rep['cost_usd']['total']} in all, ${rep['cost_usd']['median']} median per check at Token Factory list "
+        f"prices; median {rep['seconds_median']} s per check; {_pct(rep['reused_share'])} of checks reused a blind test.",
+        "", "## Per repository", "", "| Repository | Patches | Catch rate | Wrong passed | Fixes confirmed | Fixes rejected |",
+        "|---|---|---|---|---|---|",
+        *(f"| {repo} | {v['cases']} | {_pct(v['caught'])} | {_pct(v['false_proven'])} | {_pct(v['proven_fix'])} | "
+          f"{_pct(v['false_refuted'])} |" for repo, v in rep["per_repo"].items()),
+        "", "## Why some checks were Unproven", "", *(f"- {k}: {v}" for k, v in rep["unproven_reasons"].items()),
+        "", "## Every miss", "",
+        *(f"- {m['verdict']} on {m['instance_id']} ({m['kind']} {m['agent']}, "
+          f"{'fixes' if m['fixed'] else 'does not fix'} the issue): [receipt]({site}/runs/{m['run_id']})"
+          for m in rep["misses"]),
+        *([] if rep["misses"] else ["None."]),
+    ]
+    if links.get("dataset"):
+        lines += ["", f"Every row, score and trace: [the public LangSmith dataset]({links['dataset']})."]
+    return "\n".join(lines) + "\n"
+
+
+_TOKEN_SHAPES = [(r"ghp_[A-Za-z0-9]{30,}", "a GitHub token"), (r"github_pat_[A-Za-z0-9_]{30,}", "a GitHub token"),
+                 (r"lsv2_[a-z]{2}_[A-Za-z0-9_]{20,}", "a LangSmith key"), (r"tvly-[A-Za-z0-9-]{20,}", "a Tavily key"),
+                 (r"sk-[A-Za-z0-9_-]{20,}", "an API key"), (r"-----BEGIN [A-Z ]*PRIVATE KEY-----", "a private key")]
+
+
+def find_secrets(text: str, values) -> list[str]:
+    """What kinds of secret appear in text (never the secret itself): a configured value, or a known token shape."""
+    found = ["a configured secret value"] if any(v and len(v) >= 8 and v in text for v in values) else []
+    found += [name for pattern, name in _TOKEN_SHAPES if re.search(pattern, text)]
+    return list(dict.fromkeys(found))
+
+
 def case_of(inputs: dict) -> Case:
     return Case(inputs["instance_id"], inputs.get("repo", ""), inputs["kind"], inputs.get("agent", ""), False,
                 inputs.get("patch_url", ""), inputs.get("patch_sha256", ""))
