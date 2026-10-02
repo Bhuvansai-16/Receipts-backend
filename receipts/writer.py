@@ -35,6 +35,7 @@ WRITE_TOOLS = {"write_file", "edit_file", "submit_test"}
 UNCHANGED_LIMIT = 2  # resubmissions of an unchanged test file before the run ends
 SKILLS_DIR = Path(__file__).parent / "skills"
 SKILLS_ROOT = "/skills/"
+SKILL_FILES = {f"{SKILLS_ROOT}{p.parent.name}/SKILL.md" for p in SKILLS_DIR.glob("*/SKILL.md")}
 # Deepagents' file tools minus `task` (sub-agents outside the look-around budget) and `delete`, with short
 # descriptions: every turn re-sends them, and the stock ones are 4,481 characters for these seven.
 WRITER_TOOLS = ["ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute"]
@@ -177,7 +178,8 @@ class ExplorationBudget(AgentMiddleware):
     async def awrap_tool_call(self, request, handler):
         name = request.tool_call["name"]
         path = str(request.tool_call.get("args", {}).get("file_path", ""))
-        if name == "read_file" and path.startswith(SKILLS_ROOT):  # guidance from the server, not looking around
+        # The first read of each real skill is guidance, not looking around; a repeat or a made-up path counts.
+        if name == "read_file" and path in SKILL_FILES and path not in self.skills_read:
             self.skills_read.append(path)
             return await handler(request)
         reply = lambda content: ToolMessage(content, tool_call_id=request.tool_call["id"], name=name)  # noqa: E731

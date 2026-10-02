@@ -582,3 +582,20 @@ def test_reading_a_skill_is_not_looking_around(monkeypatch):
     request = SimpleNamespace(tool_call={"name": "read_file", "id": "1", "args": {"file_path": "/skills/sympy/SKILL.md"}})
     assert asyncio.run(budget.awrap_tool_call(request, handler)) == "skill text"
     assert read == ["/skills/sympy/SKILL.md"] and budget.left == 0  # not spent from the look-around budget
+
+
+def test_only_the_first_read_of_a_real_skill_is_free(monkeypatch):
+    # A model looping on skill reads, or on made-up /skills/ paths, must still run into the look-around budget.
+    monkeypatch.setattr(writer, "EXPLORE_LIMIT", 5)
+    read = []
+    budget = writer.ExplorationBudget(submit=None, skills_read=read)
+
+    async def handler(request):
+        return "text"
+
+    def call(path, n):
+        return SimpleNamespace(tool_call={"name": "read_file", "id": str(n), "args": {"file_path": path}})
+
+    for n, path in enumerate(["/skills/sympy/SKILL.md", "/skills/sympy/SKILL.md", "/skills/made-up/SKILL.md"]):
+        asyncio.run(budget.awrap_tool_call(call(path, n), handler))
+    assert read == ["/skills/sympy/SKILL.md"] and budget.left == 3
