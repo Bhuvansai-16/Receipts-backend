@@ -359,13 +359,14 @@ class _CommandLog(list):
 
 
 async def write_test(issue: str, base_image, emit=None, *, brief: str = "", history: str = "",
-                     role: str = "writer") -> WriterResult:
+                     role: str = "writer", cases: list[str] | None = None, workspace=None) -> WriterResult:
     """brief: the research docs (research.Brief.for_writer); history: what a failed attempt ended on; role: the
-    writer model's config role."""
+    writer model's config role; cases: the issue's stated cases, if already known; workspace: the blind copy of
+    base, if already made."""
     out = WriterResult()
     emit = emit or (lambda type_, data=None: None)
     out.log = _CommandLog(lambda n: emit("writer_progress", {"commands": n}))
-    backend = await agent_backend(await blind_workspace(base_image), out.log)
+    backend = await agent_backend(workspace or await blind_workspace(base_image), out.log)
 
     async def submit() -> str:
         before = out.attempts
@@ -438,7 +439,8 @@ async def write_test(issue: str, base_image, emit=None, *, brief: str = "", hist
         out.test_code, out.base_run, out.scope = trimmed, run, scope.reason
         return "ACCEPTED. Stop now."
 
-    cases = await stated_cases(issue)
+    if cases is None:
+        cases = await stated_cases(issue)
     agent = build_agent(model=config.llm(role), tools=[submit_test], system_prompt=PROMPT, backend=backend,
                         middleware=[ExplorationBudget(submit_test, out.skills_read)])
     message = (f"Issue:\n\n{issue}"

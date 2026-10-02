@@ -56,9 +56,17 @@ def fakes(monkeypatch):
     for name, fn in [("classify", classify), ("write_test", write_test), ("judge", judge),
                      ("judge_mixed", judge_mixed)]:
         monkeypatch.setattr(engine, name, fn)
+    async def no_cases(issue):
+        return []
+
+    async def own_copy(img):
+        return img
+
     monkeypatch.setattr(swebench, "base_image", base_image)  # Instance.base_image() goes through it
     monkeypatch.setattr(engine.research, "research", no_research)
     monkeypatch.setattr(engine.config, "contree", lambda: None)
+    monkeypatch.setattr(engine, "stated_cases", no_cases, raising=False)
+    monkeypatch.setattr(engine, "blind_workspace", own_copy, raising=False)
 
 
 def test_gold_patch_is_proven_and_suite_is_restricted_to_pass_to_pass():
@@ -440,3 +448,70 @@ def test_a_broken_store_never_fails_a_check():
 
     ev = asyncio.run(engine.check(INST, PATCH, tests=Broken(), run_id="r1"))
     assert ev["verdict"] == "PROVEN", ev["reason"]
+
+
+def test_the_writers_setup_starts_while_the_claim_is_classified(monkeypatch):
+    started, all_started = set(), asyncio.Event()
+
+    def mark(name):
+        started.add(name)
+        if len(started) == 3:
+            all_started.set()
+
+    async def brief(repo, issue, search=None):
+        mark("research")
+        return research.Brief()
+
+    async def cases(issue):
+        mark("cases")
+        return ["f(2) == 4"]
+
+    async def workspace(img):
+        mark("workspace")
+        return img
+
+    async def classify(issue, patch):
+        await asyncio.wait_for(all_started.wait(), 1)  # setup that waits for the claim would time out here
+        return engine.Claim(kind="fix", claim="c")
+
+    seen = {}
+
+    async def write_test(issue, img, emit=None, **kw):
+        seen.update(kw)
+        return SimpleNamespace(test_code="def test_bug(): assert 1 == 2", attempts=1, reason="ok", log=[],
+                               submissions=[])
+
+    for name, fn in [("classify", classify), ("stated_cases", cases), ("blind_workspace", workspace),
+                     ("write_test", write_test)]:
+        monkeypatch.setattr(engine, name, fn, raising=False)
+    monkeypatch.setattr(engine.research, "research", brief)
+    ev = asyncio.run(engine.check(INST, PATCH))
+    assert ev["verdict"] == "PROVEN", ev["reason"]
+    assert seen["cases"] == ["f(2) == 4"] and seen["workspace"] is not None
+
+
+def test_a_claim_with_nothing_to_check_stops_the_writers_setup(monkeypatch):
+    cancelled = []
+
+    async def slow(*a, **k):
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    async def classify(issue, patch):
+        await asyncio.sleep(0.01)
+        return engine.Claim(kind="none", claim="docs")
+
+    monkeypatch.setattr(engine, "classify", classify)
+    monkeypatch.setattr(engine, "stated_cases", slow, raising=False)
+    monkeypatch.setattr(engine.research, "research", slow)
+    ev = asyncio.run(asyncio.wait_for(engine.check(INST, PATCH), 5))
+    assert ev["verdict"] == "NO_CHECKABLE_CLAIM" and cancelled == [True, True]
+
+
+def test_the_retry_reuses_the_stated_cases(monkeypatch):
+    calls = _writer_sequence(monkeypatch, [None, "def test_bug(): assert 1 == 2"])
+    asyncio.run(engine.check(INST, PATCH))
+    assert calls[1]["cases"] == calls[0]["cases"] == [] and calls[1].get("workspace") is None  # a fresh copy

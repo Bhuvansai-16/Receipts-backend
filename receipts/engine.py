@@ -21,7 +21,7 @@ from .sandbox import TEST_ARGS, TEST_PATH, apply_patch, run_pytest, suite_files
 from .swebench import Instance
 from .verdict import (MIXED, PytestRun, Verdict, fix_verdict, partial_fix, repro_check, reproduces, restrict,
                       suite_candidates)
-from .writer import WriterResult, retry_history, write_test
+from .writer import WriterResult, blind_workspace, retry_history, stated_cases, write_test
 
 log = logging.getLogger("uvicorn.error")
 
@@ -221,33 +221,62 @@ async def check(inst: Instance, patch: str | None, emit=None, *, tests=None, run
     return ev
 
 
+def _drop(*tasks) -> None:
+    """Stop work nobody will wait for; finished work's failure is already part of the result."""
+    for t in tasks:
+        if not t.done():
+            t.cancel()
+        elif not t.cancelled():
+            t.exception()  # retrieved, so asyncio doesn't log it as lost
+
+
+def _writer_setup(inst, env) -> list:
+    """What the writer needs and the claim doesn't: research, the stated cases and its blind workspace."""
+    async def workspace():
+        return await blind_workspace(await env)
+
+    return [asyncio.ensure_future(research.research(inst.repo, inst.problem_statement)),
+            asyncio.ensure_future(stated_cases(inst.problem_statement)),
+            asyncio.ensure_future(workspace())]
+
+
 async def _pipeline(inst: Instance, patch: str | None, ev: dict, say, tests=None, run_id=None) -> tuple[Verdict, str]:
-    # The environment doesn't depend on the claim, so it builds while the claim is classified (~10 s saved).
-    # ponytail: a PR with nothing to check pays for a few seconds of an abandoned build.
+    # The environment doesn't depend on the claim, so it builds while the claim is classified (~10 s saved);
+    # without a stored test, so does everything the writer needs.
+    # ponytail: a PR with nothing to check pays for a few seconds of abandoned build and setup.
     env = asyncio.ensure_future(inst.base_image())
     key = blind_test_key(inst)
+    setup: list = []  # grown in place, so the finally also drops setup started later (a stale stored test)
     try:
         stored = await _stored_test(tests, key)
-        claim = await classify(inst.problem_statement, patch or "")
-    except BaseException:
-        env.cancel()
-        raise
+        if not stored:
+            setup += _writer_setup(inst, env)
+        return await _checked(inst, patch, ev, say, tests, run_id, key, env, stored, setup)
+    finally:
+        _drop(env, *setup)
+
+
+async def _checked(inst, patch, ev, say, tests, run_id, key, env, stored, setup) -> tuple[Verdict, str]:
+    claim = await classify(inst.problem_statement, patch or "")
     ev["claim"] = claim.model_dump()
     say("claim", ev["claim"])
     if claim.kind != "fix":
-        env.cancel()
         return Verdict.NO_CHECKABLE_CLAIM, f"classified as '{claim.kind}': nothing to check"
 
-    brief_task = None if stored else asyncio.ensure_future(research.research(inst.repo, inst.problem_statement))
     base = await env
     say("env_ready")
     w = await _reuse(stored, base, tests, key, say) if stored else None
     if w is None:
-        brief = await (brief_task or research.research(inst.repo, inst.problem_statement))
+        if not setup:  # a stale stored test: set up now
+            setup += _writer_setup(inst, env)
+        brief_task, cases_task, workspace_task = setup
+        brief = await brief_task
         ev["research"] = {"queries": brief.queries, "sources": brief.sources, "notes": brief.notes,
                           "errors": brief.errors}
         say("research", {"sources": len(brief.sources)})
-        w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer())
+        cases = await cases_task
+        w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer(), cases=cases,
+                             workspace=await workspace_task)
         # The writer failed, not the PR, and no fork has run yet: one retry, never more. Not when the model
         # provider failed: its client already retried, and the same provider would only fail again.
         if w.test_code is None and not getattr(w, "provider_error", ""):
@@ -255,7 +284,7 @@ async def _pipeline(inst: Instance, patch: str | None, ev: dict, say, tests=None
             ev["writer_first"] = {"attempts": w.attempts, "reason": w.reason,
                                   "submissions": getattr(w, "submissions", []), "tool_log": w.log}
             w = await write_test(inst.problem_statement, base, say, brief=brief.for_writer(),
-                                 history=retry_history(w), role="writer_strong")
+                                 history=retry_history(w), role="writer_strong", cases=cases)
     ev["writer"] = {"attempts": w.attempts, "reason": w.reason,
                     "test_code": w.test_code, "scope_check": getattr(w, "scope", ""), "tool_log": w.log,
                     "submissions": getattr(w, "submissions", []), "skills_read": getattr(w, "skills_read", [])}
