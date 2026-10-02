@@ -119,6 +119,7 @@ def test_report_scores_receipts_and_the_reader_and_lists_the_misses():
     assert rep["reader"]["false_accept"] == 0.5 and rep["reader"]["accepted_fix"] == 0.5
     assert [m["verdict"] for m in rep["misses"]] == ["PROVEN"] and len(rep["reader_false_accepts"]) == 1
     assert rep["unproven_reasons"] == {"no valid test": 1} and set(rep["per_repo"]) == {"o/a", "o/b"}
+    assert E.reason_group("pipeline error: ApiTimeoutError: x") == "pipeline error (sandbox or API)"
     assert "Catch rate" in E.markdown(rep, {})
 
 

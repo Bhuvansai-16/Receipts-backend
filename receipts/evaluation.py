@@ -160,7 +160,8 @@ _REASONS = [("no valid reproducing test", "no valid test"), ("does not reproduce
             ("flaky", "flaky base runs"), ("patch does not apply", "patch didn't apply"),
             ("mixed or fail differently", "mixed runs"), ("model was unavailable", "model outage"),
             ("second opinion doubts", "second opinion doubted the test"), ("did not run on the PR", "PR runs didn't run"),
-            ("could not run", "existing tests couldn't run"), ("classified as", "no checkable claim")]
+            ("could not run", "existing tests couldn't run"), ("classified as", "no checkable claim"),
+            ("pipeline error", "pipeline error (sandbox or API)")]
 
 
 def reason_group(reason: str | None) -> str:
