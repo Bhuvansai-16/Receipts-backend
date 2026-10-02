@@ -1,189 +1,176 @@
 # Receipts
 
-Checks whether a pull request does what it claims: writes the missing test blind (from the issue only),
-runs it in forked Nebius Token Factory sandboxes, and reports the evidence.
+**Proof that a pull request does what it claims.** Receipts writes the missing test from the issue alone, runs
+it before and after the change in Nebius Token Factory Sandboxes, and reports the evidence: Proven, Refuted,
+Regression or Unproven.
 
-MVP: fix engine on SWE-bench Verified, as a CLI and an API (UI in the `receipts-frontend` repo).
+[![tests](https://github.com/Bhuvansai-16/Receipts-backend/actions/workflows/tests.yml/badge.svg)](https://github.com/Bhuvansai-16/Receipts-backend/actions/workflows/tests.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/live%20demo-no%20sign--in-black.svg)](https://receipts-frontend-six.vercel.app/demo)
 
-## Setup (global Python, no venv)
+- **Live demo, no account:** https://receipts-frontend-six.vercel.app/demo (pick a pull request, watch the
+  check run, read the receipt)
+- **The app** (connect GitHub, check your own pull requests): https://receipts-frontend-six.vercel.app
+- **Frontend code:** [Bhuvansai-16/Receipts-frontend](https://github.com/Bhuvansai-16/Receipts-frontend). This
+  repository is the API and the agent.
 
-```bash
-pip install -r requirements.txt
-cp .env.example .env   # fill in keys
-python -m receipts smoke --instance psf__requests-1142
+![A finished receipt: the claim, the blind test, three failing runs on the original code, three passing runs with the pull request, the existing tests, and the verdict](docs/images/receipt.png)
+
+## Why
+
+A green CI check says the change broke nothing that was already tested. It does not say the bug is gone: the
+case the issue reports usually has no test yet. More and more pull requests are written by AI coding agents,
+and reviewers can't run every one by hand. Receipts gives a maintainer executed evidence in a few minutes, and
+says nothing against a pull request on a guess: anything uncertain is Unproven, never Refuted.
+
+## How a check works
+
+```mermaid
+flowchart TD
+    A[Pull request and its linked issue] --> B[Classify the claim<br/>Nemotron Nano, three votes]
+    A --> C[Build the environment<br/>Token Factory Sandbox]
+    A --> D[Research brief<br/>Tavily: docs for the APIs the issue names]
+    B --> E{Claims a bug fix?}
+    E -- no --> N[No checkable claim]
+    E -- yes --> F[Blind test writer<br/>Nemotron Super, Deepagents and skills,<br/>never sees the pull request]
+    C --> F
+    D --> F
+    F --> G[Gates on each test<br/>Super scope check, Ultra after-fix review]
+    G --> H[3 runs on the base + 3 with the PR<br/>+ existing tests, forked sandboxes]
+    H --> I[Deterministic verdict rules]
+    I -- Refuted --> J[Second opinion<br/>Nemotron Ultra]
+    I --> K[Receipt and a check on the pull request]
+    J --> K
 ```
 
-## API server
+1. **Claim.** Nemotron Nano reads the linked issue (or the pull request's own description) three times and the
+   majority decides whether it claims to fix a bug.
+2. **Environment.** The repository at the pull request's base commit is installed in a Token Factory Sandbox,
+   while the claim is classified.
+3. **Research.** Tavily fetches the library's own documentation for the APIs the issue names, from docs sites
+   only, so the writer knows how to call them.
+4. **Blind test.** A Deepagents agent on Nemotron Super gets the issue and a copy of the unpatched repository
+   without git history, and writes one pytest file that must fail on today's code with an assertion. It never
+   sees the pull request. Each submitted test passes code-checked gates: it runs on a clean copy, Nemotron
+   Super checks it asserts only what the issue states, and Nemotron Ultra checks it would pass once the bug is
+   fixed.
+5. **Runs.** The accepted test runs three times on the original code and three times with the pull request,
+   each in its own forked sandbox, together with the repository's existing tests.
+6. **Verdict.** Plain rules, no model, decide the verdict from the runs. Before a pull request is called
+   Refuted, Nemotron Ultra checks that the test matches the issue; if it doubts the test, the verdict is
+   Unproven.
+7. **Receipt.** The verdict, the test, every run's output and every command the agent ran, on a public page and
+   as a check on the pull request.
 
-The React UI is the separate `receipts-frontend` repo; it talks only to this API. People sign up with email
-and password or GitHub (Neon Auth), runs are stored in Neon Postgres, and anyone with a receipt link can open
-it without signing in.
+A test written for an issue is kept: the next check of the same issue at the same base commit reuses it and
+skips the writer. It was written without seeing any pull request, so it is fair to all of them.
 
-```bash
-python -m receipts migrate       # once, and after new files in migrations/
-python -m receipts import-runs   # optional: publish runs/*.json as example receipts
-python -m receipts serve         # http://localhost:8000
-```
+## NVIDIA Nemotron on Nebius Token Factory
 
-Without `DATABASE_URL` the API still starts: it keeps runs in memory, starting from the saved ones in `runs/`.
+| Model on Token Factory | Role | Why this model | Typical tokens per check |
+|---|---|---|---|
+| Nemotron 3 Nano 30B A3B | Classifies the claim, three votes | Cheap and fast; a vote of three stopped one wrong "no claim" | about 3.5K |
+| Nemotron 3 Super 120B A12B | Writes the blind test; scope check of each submitted test | A/B on five real pull requests: a valid test for 4 of 5 with half the tokens; Nemotron 3.5 Lightning managed none | about 21K |
+| Nemotron 3 Ultra 550B A55B | After-fix review of each test; second opinion before any Refuted | Used only where a wrong call would accuse a contributor | about 3.6K |
 
-## Sign-in and database (Neon)
+Token counts are the averages of the six demo checks on 2 October 2026. Every model can be changed with an
+environment variable (`MODEL_CLASSIFIER`, `MODEL_TEST_WRITER`, `MODEL_TEST_WRITER_STRONG`, `MODEL_SCOPE`,
+`MODEL_JUDGE`).
 
-1. Neon Console > your project (AWS region) > Connect: the pooled connection string (host contains
-   `-pooler`) goes in `DATABASE_URL`, the direct one in `DATABASE_URL_UNPOOLED`. Keep
-   `sslmode=require&channel_binding=require` on both.
-2. Neon Console > Auth: enable it and copy the Auth URL into `NEON_AUTH_URL`.
-3. GitHub sign-in: create a GitHub OAuth App (GitHub > Settings > Developer settings) with the callback URL
-   `{NEON_AUTH_URL}/callback/github`, then add its client ID and secret under Neon Auth > OAuth providers.
-4. `FRONTEND_URL` is where the UI runs (default `http://localhost:5173`). In production, serve UI and API from
-   one parent domain (`app.example.com` + `api.example.com`) so auth cookies stay first-party, add both to Neon
-   Auth's trusted domains, and work through Neon's production checklist (own SMTP, email verification,
-   "Allow localhost" off).
+## Where Token Factory helped
 
-The browser never talks to Neon directly: `/api/auth/*` proxies Neon Auth the way Neon's own server SDK does
-and rewrites its cookies to `HttpOnly; Secure; SameSite=Lax`. Other endpoints: `/api/me`, `/api/runs` (your
-runs, newest first, paged), `/api/runs/{id}` and `/api/runs/{id}/events` (public receipts), `/api/github/repos` (the
-signed-in user's public GitHub repositories, read with their GitHub sign-in token on the server), `/api/health`.
+- **One key, three model sizes and the sandboxes.** The same `NEBIUS_API_KEY` reaches Nano, Super and Ultra
+  through an OpenAI-compatible endpoint and runs the Token Factory Sandboxes, so each step uses the smallest
+  model that does the job.
+- **Forked sandboxes.** A built environment is a snapshot; the six verdict runs fork it and run at the same time
+  (about 7 s for all six), and the agent works in its own copy. No GitHub token or secret ever enters a sandbox.
+- **Environments kept across restarts.** A built environment is tagged in the Sandboxes, so a check after a
+  server restart finds it in 7 s instead of rebuilding it in 38 s.
+- **Cost you can see.** `scripts/usage_report.py` prices any receipt at Token Factory's list prices: a check
+  costs about $0.013, or $0.004 when it reuses a test.
 
-## GitHub App (real pull requests)
+## Other services
 
-One GitHub App does three jobs: it is Neon's "Sign in with GitHub" provider, users install it on the
-repositories they want checked, and it posts each verdict as a `Receipts` check on the pull request.
-
-1. GitHub > Settings > Developer settings > GitHub Apps > New GitHub App.
-   - Callback URL: `{NEON_AUTH_URL}/callback/github`. Leave "Request user authorization during installation" off.
-   - Setup URL: `{API_URL}/api/github/setup`, with "Redirect on update" on.
-   - Webhook: active, URL `{API_URL}/api/github/webhook` (locally, a smee.io channel, see below), and a secret.
-   - Repository permissions: Metadata read, Contents read, Pull requests read, Issues read, Checks read and write.
-   - Subscribe to events: Pull request.
-2. Generate a private key (a `.pem` file) and note the App ID and the app's URL name (`github.com/apps/<slug>`).
-3. Neon Console > Auth > OAuth providers > GitHub: replace the client ID and secret with this app's.
-   Existing GitHub users sign in once more afterwards.
-4. Add to `.env`: `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY_PATH` (or the PEM itself in
-   `GITHUB_APP_PRIVATE_KEY` with newlines written as `\n`), `GITHUB_WEBHOOK_SECRET`, and `API_URL`.
-5. Run `python -m receipts migrate` for the GitHub tables.
-
-Local webhooks: GitHub can't reach `localhost`, so forward a smee.io channel to the API:
-
-```bash
-npx smee-client --url https://smee.io/<your-channel> --target http://localhost:8000/api/github/webhook
-```
-
-Checks run in Nebius Token Factory Sandboxes and need Python projects tested with pytest. The API only trusts
-installations that GitHub lists for the signed-in user, verifies every webhook signature, and gives each GitHub
-call a token limited to one repository; no token enters a sandbox.
-
-Limits keep a public app affordable: each user gets `MAX_ACTIVE_RUNS` checks at a time and `RUNS_PER_DAY` in 24
-hours, everyone together gets `GLOBAL_RUNS_PER_DAY`, and `ALLOWED_GITHUB_ACCOUNTS` (when set) limits webhook
-auto-checks to those GitHub accounts.
-
-## Demo without sign-in
-
-`/demo` in the UI runs hand-picked checks for anyone, no account needed: the real fix, an empty patch and a
-plausible wrong patch for two SWE-bench issues (`receipts/demo_cases.json`, wrong patches in
-`receipts/demo_patches/`). Every demo check is a real check with the same pipeline and verdict rules.
-
-- `GET /api/demo`: the cases (never the patch text), the demo check running now, finished demo receipts, and
-  how many demo checks are left today.
-- `POST /api/demo/runs {"case": "<id>"}`: starts a case, or joins the demo check already running (one at a
-  time). Capped by `DEMO_RUNS_PER_DAY` (default 20) and `GLOBAL_RUNS_PER_DAY`.
-
-## Deploy: Render (API) and Vercel (UI)
-
-The API runs on Render at `https://receipts-backend-wnjy.onrender.com`. The UI runs on Vercel and forwards
-`/api/*` here (`vercel.json` in `receipts-frontend`), so the browser sees one origin and sign-in cookies stay
-first-party on the free hostnames. Live events and GitHub webhooks come here directly, because Vercel ends
-proxied requests after 120 seconds.
-
-Render > New > Web Service > this repository, runtime Docker (it builds the `Dockerfile`):
-
-- Instance: a paid type, about 1 GB of memory. Free instances sleep after 15 idle minutes, which drops GitHub
-  webhooks and running checks. Keep one instance, no autoscaling: live runs and their event stream live in one
-  process. Region: Ohio, next to Neon's `us-east-2`.
-- Health check path `/api/health`. Render sets `PORT`, and `serve` then listens on `0.0.0.0:$PORT`.
-- Environment: `NEBIUS_API_KEY`, `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `DATABASE_URL` (pooled),
-  `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_PRIVATE_KEY` (the whole `.pem` file), `CONTREE_PROJECT`, `NEON_AUTH_URL`,
-  `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, and `FRONTEND_URL` (the Vercel URL). Leave out
-  `GITHUB_APP_PRIVATE_KEY_PATH` (the key file isn't in the image) and `COOKIE_DOMAIN`.
-- GitHub App: Setup URL `https://<vercel-app>/api/github/setup` (through Vercel, it needs the session cookie),
-  webhook URL `https://receipts-backend-wnjy.onrender.com/api/github/webhook`.
-
-## Alternative: Cloud Run (API) and Vercel (UI)
-
-The UI runs on Vercel and forwards `/api/*` to this API on Google Cloud Run (`vercel.json` in
-`receipts-frontend`), so the browser sees one origin and sign-in cookies stay first-party on the free
-`*.vercel.app` and `*.run.app` hostnames. Live events and GitHub webhooks go to Cloud Run directly, because
-Vercel ends proxied requests after 120 seconds.
-
-```bash
-gcloud auth login
-gcloud config set project <PROJECT_ID>
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
-python scripts/cloudrun_secrets.py      # .env + the GitHub App key -> Secret Manager; prints --set-secrets
-gcloud run deploy receipts-api --source . --region us-east5 --allow-unauthenticated \
-  --min-instances 1 --max-instances 1 --no-cpu-throttling --cpu 1 --memory 1Gi \
-  --timeout 3600 --concurrency 250 \
-  --set-secrets "<printed by the script>" \
-  --set-env-vars "FRONTEND_URL=https://<your-project>.vercel.app"
-```
-
-Why these settings: live runs, the event stream and caches live in one process (one instance, min and max), a
-check keeps running after the request that started it returns (CPU always allocated), and live streams stay
-open for up to an hour (timeout). The heavy work runs in Nebius sandboxes and Token Factory, so one vCPU is
-enough. The image (`Dockerfile`) bakes in the SWE-bench Verified cache, and `.gcloudignore` keeps `.env`,
-the GitHub App key and local runs out of the upload. `us-east5` is next to Neon's `us-east-2`.
-
-After the first deploy: put the Cloud Run URL in the UI's `vercel.json`, set Neon Auth's trusted domain to the
-Vercel URL, and point the GitHub App's Setup URL at `https://<your-project>.vercel.app/api/github/setup` and its
-webhook at `https://<cloud-run-url>/api/github/webhook`.
-
-## Run
-
-```bash
-python -m receipts run psf__requests-1142 --patch gold   # real fix, expect PROVEN
-python -m receipts run psf__requests-1142 --patch none   # PR that changes nothing, expect REFUTED/UNPROVEN
-python -m receipts run psf__requests-1142 --patch my.diff
-```
-
-Evidence JSON lands in `runs/`. Traces in LangSmith project `receipts`.
+- **Tavily**: the research brief. Before the writer starts, Tavily searches the library's documentation for
+  the APIs named in the issue's code. Code hosts are excluded by Tavily and dropped again here, as are pages that
+  show source code, so the brief can't leak the fix; the writer gets the text without links. The receipt shows
+  how many pages it found, and the evidence lists them.
+- **Neon**: Postgres for runs and kept tests, and Neon Auth for sign-in.
+- **LangSmith**: a trace of every model call and agent step.
+- **Render** runs this API, **Vercel** the web app.
 
 ## Verdicts
 
 | Verdict | Meaning |
 |---|---|
-| PROVEN | Blind test fails on base with AssertionError (3/3), passes on PR (3/3), existing tests that passed on base still pass |
-| REGRESSION | Test passes on PR, but existing tests that passed on base now fail consistently |
-| REFUTED | Test fails on PR with the same assertion as base (3/3) and Nemotron Ultra confirms the test matches the issue |
-| UNPROVEN | Anything else. Explicitly not evidence against the PR |
-| NO_CHECKABLE_CLAIM | Not a bug-fix claim |
+| PROVEN | The test fails on the original code with an assertion (3 of 3 runs), passes with the pull request (3 of 3), and the existing tests that passed still pass |
+| REGRESSION | The test passes with the pull request, but existing tests that passed before now fail every time |
+| REFUTED | The test still fails with the pull request, the same way (3 of 3), and Nemotron Ultra confirms the test matches the issue |
+| UNPROVEN | Anything else. Explicitly not evidence against the pull request |
+| NO_CHECKABLE_CLAIM | The pull request doesn't claim to fix a bug |
 
-## Blindness: what is and isn't guaranteed
+## What blind means
 
-- The test writer never receives the patch, SWE-bench's hidden tests (`test_patch`, `FAIL_TO_PASS`) or hints.
-- It works in its own sandbox copy with `.git` removed; every verdict run forks the untouched base image.
-- The research brief searches only the library's documentation site, for names in the issue's code. Code hosts
-  are excluded by Tavily and dropped again locally, as are Sphinx "view source" pages, which can show newer code.
-  The writer gets the pages' text without their links.
-- Residual risks: documentation describes the latest release, which may already include the fix (a changelog line,
-  a "changed in version" note); the writer is told the docs show usage only and the issue decides what is
-  correct. The sandbox has network access. Every shell command the agent ran, and every source and note the brief
-  used, is recorded in the evidence JSON (`writer.tool_log`, `research.sources`, `research.notes`) so a leak can
-  be audited.
+- The test writer never receives the pull request, nor SWE-bench's hidden tests or hints.
+- It works in its own sandbox copy with `.git` removed; every verdict run forks the untouched original.
+- The research brief only reads documentation sites, for names in the issue's code, and never passes on links.
+- Remaining risks: documentation describes the latest release, which may already include the fix; the writer is
+  told the docs show usage only and the issue decides what is correct. The sandbox has network access. Every
+  command the agent ran and every source the brief used is in the evidence, so a leak can be audited.
 
-## Models
+## Results
 
-| Step | Model |
+Measured on real services; the six demo cases are the live demo's real fix, empty patch and wrong patch for two
+SWE-bench Verified issues (xarray 4629, requests 1142).
+
+| | Before (1 Oct) | After (2 Oct) |
+|---|---|---|
+| Six demo checks, tokens | 355,938 | 169,862 (-52%) |
+| Six demo checks, model cost at list prices | $0.139 | $0.080 (-42%) |
+| A check that reuses a blind test | 50 s, $0.022 | 19 to 25 s, $0.004 |
+| Pull request check after a restart | environment ready at 38 s | ready at 7 s |
+
+Both columns give the same six verdicts. Details:
+[optimizations results](docs/superpowers/specs/2026-10-01-agent-and-backend-optimizations-design.md#results-2-october-2026).
+
+<img src="docs/images/reused.png" width="420" alt="A receipt whose blind test was reused from an earlier check of the same issue: Refuted in 25 seconds with 8K tokens">
+
+## Run it yourself
+
+The quickest way is the [live demo](https://receipts-frontend-six.vercel.app/demo). To run a check on your
+machine you need Python 3.12 and two settings from your Nebius account: a Token Factory API key and a
+Sandboxes project.
+
+```bash
+git clone https://github.com/Bhuvansai-16/Receipts-backend && cd Receipts-backend
+pip install -r requirements.txt
+printf 'NEBIUS_API_KEY=...\nCONTREE_PROJECT=...\n' > .env   # your Token Factory key and Sandboxes project
+python -m receipts run psf__requests-1142 --patch none
+```
+
+This checks a pull request that changes nothing against a real requests bug: expect REFUTED in about a minute
+(the first run also downloads SWE-bench Verified). `--patch gold` checks the real fix (PROVEN), and
+`--patch my.diff` your own diff. Optional settings: `TAVILY_API_KEY` adds the research brief,
+`LANGSMITH_API_KEY` traces every step. The receipt is saved as JSON in `runs/`.
+
+Tests: `python -m pytest -q`.
+
+## Repository map
+
+| Path | What it is |
 |---|---|
-| Claim classification | Nemotron 3 Nano |
-| Research brief before the writer starts (library docs for the APIs the issue names) | Tavily |
-| Blind test writing (Deepagents agent in sandbox) | Nemotron 3 Super |
-| One automatic retry when no test was accepted | `MODEL_TEST_WRITER_STRONG` (see below) |
-| Scope check of each submitted test (only what the issue asks) | Nemotron 3 Super |
-| Second opinion before REFUTED; after-fix review of each test; explanation of a partial fix | Nemotron 3 Ultra |
+| `receipts/engine.py` | The check: claim, environment, research, writer, runs, verdict, second opinion, test reuse |
+| `receipts/writer.py` | The blind test writer: Deepagents middleware, its tools, the budget, the gates |
+| `receipts/skills/` | Skills the writer reads when an issue needs them (exceptions, expected values, sympy, arrays, requests, plotting) |
+| `receipts/verdict.py` | The verdict rules, plain code |
+| `receipts/sandbox.py`, `receipts/targets.py` | Token Factory Sandboxes: pytest runs, patches, environments for GitHub repositories |
+| `receipts/server.py`, `checks.py`, `github.py`, `demo.py` | The API, background checks, the GitHub App, the no-sign-in demo |
+| `scripts/` | Evaluation on real pull requests, the credit report |
+| `docs/superpowers/` | Design specs and plans, with measured results |
 
-The writer model was chosen by an A/B on five real pull requests (`scripts/eval_prs.py`): Nemotron 3 Super wrote a
-valid blind test for 4 of 5 with half the tokens; Nemotron 3.5 Lightning for none. Set `MODEL_TEST_WRITER` (first
-attempt) and `MODEL_TEST_WRITER_STRONG` (the one automatic retry) to change them.
+## Running your own
+
+The API, Neon sign-in and database, the GitHub App and deployment are in [docs/SETUP.md](docs/SETUP.md).
 
 ## License
 

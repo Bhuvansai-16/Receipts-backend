@@ -1,0 +1,127 @@
+# Running your own Receipts
+
+The API, its database and sign-in, the GitHub App, and deployment. For what Receipts is and a two-key local run, see the [README](../README.md).
+
+## API server
+
+The React UI is the separate `receipts-frontend` repo; it talks only to this API. People sign up with email
+and password or GitHub (Neon Auth), runs are stored in Neon Postgres, and anyone with a receipt link can open
+it without signing in.
+
+```bash
+python -m receipts migrate       # once, and after new files in migrations/
+python -m receipts import-runs   # optional: publish runs/*.json as example receipts
+python -m receipts serve         # http://localhost:8000
+```
+
+Without `DATABASE_URL` the API still starts: it keeps runs in memory, starting from the saved ones in `runs/`.
+
+## Sign-in and database (Neon)
+
+1. Neon Console > your project (AWS region) > Connect: the pooled connection string (host contains
+   `-pooler`) goes in `DATABASE_URL`, the direct one in `DATABASE_URL_UNPOOLED`. Keep
+   `sslmode=require&channel_binding=require` on both.
+2. Neon Console > Auth: enable it and copy the Auth URL into `NEON_AUTH_URL`.
+3. GitHub sign-in: create a GitHub OAuth App (GitHub > Settings > Developer settings) with the callback URL
+   `{NEON_AUTH_URL}/callback/github`, then add its client ID and secret under Neon Auth > OAuth providers.
+4. `FRONTEND_URL` is where the UI runs (default `http://localhost:5173`). In production, serve UI and API from
+   one parent domain (`app.example.com` + `api.example.com`) so auth cookies stay first-party, add both to Neon
+   Auth's trusted domains, and work through Neon's production checklist (own SMTP, email verification,
+   "Allow localhost" off).
+
+The browser never talks to Neon directly: `/api/auth/*` proxies Neon Auth the way Neon's own server SDK does
+and rewrites its cookies to `HttpOnly; Secure; SameSite=Lax`. Other endpoints: `/api/me`, `/api/runs` (your
+runs, newest first, paged), `/api/runs/{id}` and `/api/runs/{id}/events` (public receipts), `/api/github/repos` (the
+signed-in user's public GitHub repositories, read with their GitHub sign-in token on the server), `/api/health`.
+
+## GitHub App (real pull requests)
+
+One GitHub App does three jobs: it is Neon's "Sign in with GitHub" provider, users install it on the
+repositories they want checked, and it posts each verdict as a `Receipts` check on the pull request.
+
+1. GitHub > Settings > Developer settings > GitHub Apps > New GitHub App.
+   - Callback URL: `{NEON_AUTH_URL}/callback/github`. Leave "Request user authorization during installation" off.
+   - Setup URL: `{API_URL}/api/github/setup`, with "Redirect on update" on.
+   - Webhook: active, URL `{API_URL}/api/github/webhook` (locally, a smee.io channel, see below), and a secret.
+   - Repository permissions: Metadata read, Contents read, Pull requests read, Issues read, Checks read and write.
+   - Subscribe to events: Pull request.
+2. Generate a private key (a `.pem` file) and note the App ID and the app's URL name (`github.com/apps/<slug>`).
+3. Neon Console > Auth > OAuth providers > GitHub: replace the client ID and secret with this app's.
+   Existing GitHub users sign in once more afterwards.
+4. Add to `.env`: `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY_PATH` (or the PEM itself in
+   `GITHUB_APP_PRIVATE_KEY` with newlines written as `\n`), `GITHUB_WEBHOOK_SECRET`, and `API_URL`.
+5. Run `python -m receipts migrate` for the GitHub tables.
+
+Local webhooks: GitHub can't reach `localhost`, so forward a smee.io channel to the API:
+
+```bash
+npx smee-client --url https://smee.io/<your-channel> --target http://localhost:8000/api/github/webhook
+```
+
+Checks run in Nebius Token Factory Sandboxes and need Python projects tested with pytest. The API only trusts
+installations that GitHub lists for the signed-in user, verifies every webhook signature, and gives each GitHub
+call a token limited to one repository; no token enters a sandbox.
+
+Limits keep a public app affordable: each user gets `MAX_ACTIVE_RUNS` checks at a time and `RUNS_PER_DAY` in 24
+hours, everyone together gets `GLOBAL_RUNS_PER_DAY`, and `ALLOWED_GITHUB_ACCOUNTS` (when set) limits webhook
+auto-checks to those GitHub accounts.
+
+## Demo without sign-in
+
+`/demo` in the UI runs hand-picked checks for anyone, no account needed: the real fix, an empty patch and a
+plausible wrong patch for two SWE-bench issues (`receipts/demo_cases.json`, wrong patches in
+`receipts/demo_patches/`). Every demo check is a real check with the same pipeline and verdict rules.
+
+- `GET /api/demo`: the cases (never the patch text), the demo check running now, finished demo receipts, and
+  how many demo checks are left today.
+- `POST /api/demo/runs {"case": "<id>"}`: starts a case, or joins the demo check already running (one at a
+  time). Capped by `DEMO_RUNS_PER_DAY` (default 20) and `GLOBAL_RUNS_PER_DAY`.
+
+## Deploy: Render (API) and Vercel (UI)
+
+The API runs on Render at `https://receipts-backend-wnjy.onrender.com`. The UI runs on Vercel and forwards
+`/api/*` here (`vercel.json` in `receipts-frontend`), so the browser sees one origin and sign-in cookies stay
+first-party on the free hostnames. Live events and GitHub webhooks come here directly, because Vercel ends
+proxied requests after 120 seconds.
+
+Render > New > Web Service > this repository, runtime Docker (it builds the `Dockerfile`):
+
+- Instance: a paid type, about 1 GB of memory. Free instances sleep after 15 idle minutes, which drops GitHub
+  webhooks and running checks. Keep one instance, no autoscaling: live runs and their event stream live in one
+  process. Region: Ohio, next to Neon's `us-east-2`.
+- Health check path `/api/health`. Render sets `PORT`, and `serve` then listens on `0.0.0.0:$PORT`.
+- Environment: `NEBIUS_API_KEY`, `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `DATABASE_URL` (pooled),
+  `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_PRIVATE_KEY` (the whole `.pem` file), `CONTREE_PROJECT`, `NEON_AUTH_URL`,
+  `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, and `FRONTEND_URL` (the Vercel URL). Leave out
+  `GITHUB_APP_PRIVATE_KEY_PATH` (the key file isn't in the image) and `COOKIE_DOMAIN`.
+- GitHub App: Setup URL `https://<vercel-app>/api/github/setup` (through Vercel, it needs the session cookie),
+  webhook URL `https://receipts-backend-wnjy.onrender.com/api/github/webhook`.
+
+## Alternative: Cloud Run (API) and Vercel (UI)
+
+The UI runs on Vercel and forwards `/api/*` to this API on Google Cloud Run (`vercel.json` in
+`receipts-frontend`), so the browser sees one origin and sign-in cookies stay first-party on the free
+`*.vercel.app` and `*.run.app` hostnames. Live events and GitHub webhooks go to Cloud Run directly, because
+Vercel ends proxied requests after 120 seconds.
+
+```bash
+gcloud auth login
+gcloud config set project <PROJECT_ID>
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+python scripts/cloudrun_secrets.py      # .env + the GitHub App key -> Secret Manager; prints --set-secrets
+gcloud run deploy receipts-api --source . --region us-east5 --allow-unauthenticated \
+  --min-instances 1 --max-instances 1 --no-cpu-throttling --cpu 1 --memory 1Gi \
+  --timeout 3600 --concurrency 250 \
+  --set-secrets "<printed by the script>" \
+  --set-env-vars "FRONTEND_URL=https://<your-project>.vercel.app"
+```
+
+Why these settings: live runs, the event stream and caches live in one process (one instance, min and max), a
+check keeps running after the request that started it returns (CPU always allocated), and live streams stay
+open for up to an hour (timeout). The heavy work runs in Nebius sandboxes and Token Factory, so one vCPU is
+enough. The image (`Dockerfile`) bakes in the SWE-bench Verified cache, and `.gcloudignore` keeps `.env`,
+the GitHub App key and local runs out of the upload. `us-east5` is next to Neon's `us-east-2`.
+
+After the first deploy: put the Cloud Run URL in the UI's `vercel.json`, set Neon Auth's trusted domain to the
+Vercel URL, and point the GitHub App's Setup URL at `https://<your-project>.vercel.app/api/github/setup` and its
+webhook at `https://<cloud-run-url>/api/github/webhook`.
