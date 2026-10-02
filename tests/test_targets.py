@@ -73,9 +73,15 @@ def test_base_image_downloads_the_repo_once_and_picks_the_suite(monkeypatch):
             assert kw["files"]["/tmp/src.tar.gz"] == tarball
             return self
 
+        async def tag_as(self, tag):
+            return self
+
     class Images:
         async def oci(self, ref):
             return Image()
+
+        async def use(self, ref, strict=False):
+            raise LookupError("no such tag")
 
     monkeypatch.setattr(targets.config, "contree", lambda: SimpleNamespace(images=Images()))
     monkeypatch.setattr(targets, "_envs", {})
@@ -84,3 +90,63 @@ def test_base_image_downloads_the_repo_once_and_picks_the_suite(monkeypatch):
     asyncio.run(first.base_image())
     asyncio.run(again.base_image())
     assert downloads == [1] and first.suite == again.suite == ["tests/test_calc.py"]
+
+
+def _contree(images):
+    return lambda: SimpleNamespace(images=images)
+
+
+def test_a_kept_environment_skips_the_download_after_a_restart(monkeypatch):
+    class Kept:
+        exit_code, stdout = 0, b"tests/test_calc.py\npkg/test_util.py\n"
+
+        async def run(self, **kw):
+            return self
+
+    class Images:
+        async def use(self, ref, strict=False):
+            assert ref == targets.env_tag("Octo/Hello", "SHA") and strict
+            return Kept()
+
+    async def fetch():
+        raise AssertionError("a kept environment needs no download")
+
+    monkeypatch.setattr(targets.config, "contree", _contree(Images()))
+    monkeypatch.setattr(targets, "_envs", {})
+    t = targets.RepoTarget("Octo/Hello#1", "Octo/Hello", "claim", "SHA", ["pkg/calc.py"], fetch)
+    asyncio.run(t.base_image())
+    assert t.suite == ["tests/test_calc.py"]
+
+
+def test_a_new_environment_is_built_and_kept(monkeypatch):
+    tags = []
+
+    class Built:
+        exit_code = 0
+
+        async def run(self, **kw):
+            return self
+
+        async def tag_as(self, tag):
+            tags.append(tag)
+            return self
+
+    class Images:
+        async def use(self, ref, strict=False):
+            raise LookupError("no such tag")
+
+        async def oci(self, ref):
+            return Built()
+
+    async def fetch():
+        return make_tarball({"octo-hello-abc/pkg/calc.py": b"", "octo-hello-abc/tests/test_calc.py": b""})
+
+    monkeypatch.setattr(targets.config, "contree", _contree(Images()))
+    monkeypatch.setattr(targets, "_envs", {})
+    t = targets.RepoTarget("octo/hello#1", "octo/hello", "claim", "sha", ["pkg/calc.py"], fetch)
+    asyncio.run(t.base_image())
+    assert tags == [targets.env_tag("octo/hello", "sha")] and t.suite == ["tests/test_calc.py"]
+
+
+def test_env_tags_are_lowercase_and_safe():
+    assert targets.env_tag("Octo/Hello.World", "ABC123") == "receipts-env/octo--hello.world:abc123"

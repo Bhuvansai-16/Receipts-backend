@@ -1,5 +1,6 @@
 """Real GitHub repositories as check targets (the counterpart of swebench.Instance)."""
 import io
+import logging
 import re
 import tarfile
 from collections.abc import Awaitable, Callable
@@ -26,10 +27,35 @@ pip install -q --disable-pip-version-check -e '.[test]' || pip install -q -e '.[
 for f in requirements*.txt requirements/*.txt; do if [ -f "$f" ]; then pip install -q -r "$f" || true; fi; done
 pip install -q pytest"""
 _envs: dict[tuple[str, str], tuple[object, set[str]]] = {}  # (repo, base sha) -> (env image, its files)
+TEST_FILES = "cd /testbed && find . -name 'test_*.py' -not -path './.git/*' | sed 's|^./||'"
+log = logging.getLogger("uvicorn.error")
 
 
 class EnvironmentSetupError(RuntimeError):
     pass
+
+
+def env_tag(repo: str, base_sha: str) -> str:
+    """Where a built environment is kept in Nebius Sandboxes, so a restart doesn't rebuild it."""
+    return f"receipts-env/{repo.lower().replace('/', '--')}:{base_sha.lower()}"
+
+
+async def _kept_env(repo: str, base_sha: str):
+    """(environment, its test files) built for this commit before a restart, or None."""
+    try:
+        env = await config.contree().images.use(env_tag(repo, base_sha), strict=True)
+        listing = await env.run(shell=TEST_FILES, timeout=config.SANDBOX_TIMEOUT_S)
+        return (env, set(text(listing.stdout).split())) if listing.exit_code == 0 else None
+    except Exception as e:  # not kept, or the lookup failed: build it as before
+        log.info("no kept environment for %s@%s: %s", repo, base_sha[:12], e)
+        return None
+
+
+async def _keep(env, repo: str, base_sha: str) -> None:
+    try:
+        await env.tag_as(env_tag(repo, base_sha))
+    except Exception as e:
+        log.warning("couldn't keep the environment for %s@%s: %s", repo, base_sha[:12], e)
 
 
 def linked_issue(body: str | None) -> int | None:
@@ -69,19 +95,23 @@ class RepoTarget:
 
     async def base_image(self):
         """The repo installed at base_sha. Downloads here, not in pr_target: the engine builds this while it
-        classifies the claim, and a cached environment needs no download at all."""
+        classifies the claim, and a cached or kept environment needs no download at all."""
         key = (self.repo, self.base_sha)
-        if key not in _envs:  # ponytail: per-process cache; a restart rebuilds it
-            tarball = await self.fetch()
-            image = await config.contree().images.oci(PYTHON_IMAGE)
-            env = await image.run(shell=SETUP, files={"/tmp/src.tar.gz": tarball}, disposable=False,
-                                  timeout=config.SANDBOX_TIMEOUT_S)
-            if env.exit_code != 0:
-                raise EnvironmentSetupError(f"setting up {self.repo} failed: {text(env.stderr)[-300:].strip()}")
-            _envs[key] = (env, tar_files(tarball))
+        if key not in _envs:  # ponytail: per-process cache in front of the tags kept in Nebius Sandboxes
+            _envs[key] = await _kept_env(self.repo, self.base_sha) or await self._build()
         env, files = _envs[key]
         self.suite = suite_for(self.changed, files)
         return env
+
+    async def _build(self):
+        tarball = await self.fetch()
+        image = await config.contree().images.oci(PYTHON_IMAGE)
+        env = await image.run(shell=SETUP, files={"/tmp/src.tar.gz": tarball}, disposable=False,
+                              timeout=config.SANDBOX_TIMEOUT_S)
+        if env.exit_code != 0:
+            raise EnvironmentSetupError(f"setting up {self.repo} failed: {text(env.stderr)[-300:].strip()}")
+        await _keep(env, self.repo, self.base_sha)
+        return env, tar_files(tarball)
 
 
 async def pr_target(installation_id: int, repo_id: int, full_name: str, number: int):
