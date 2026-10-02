@@ -121,6 +121,7 @@ def test_report_scores_receipts_and_the_reader_and_lists_the_misses():
     assert rep["unproven_reasons"] == {"no valid test": 1} and set(rep["per_repo"]) == {"o/a", "o/b"}
     assert E.reason_group("pipeline error: ApiTimeoutError: x") == "pipeline error (sandbox or API)"
     assert "Catch rate" in E.markdown(rep, {})
+    assert E._pct(0.005) == "1%" and E._pct(0.6083) == "61%"  # half up, as the Results page rounds
 
 
 def test_find_secrets_names_what_it_found_without_repeating_it():

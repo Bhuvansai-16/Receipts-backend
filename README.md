@@ -120,6 +120,28 @@ environment variable (`MODEL_CLASSIFIER`, `MODEL_TEST_WRITER`, `MODEL_TEST_WRITE
 
 ## Results
 
+### Measured against SWE-bench
+
+199 patches for 40 SWE-bench Verified issues: each issue's real fix, an empty change, and patches from eight
+published coding agents. SWE-bench's hidden tests label which patches really fix the issue; Receipts never sees
+them. The same patches went to Nemotron Ultra with the issue and the diff, asked whether the patch fixes it.
+
+| Out of the patches | Receipts | Nemotron Ultra reading the diff |
+|---|---|---|
+| Wrong patches passed as fixes | 10% | 46% |
+| Wrong patches caught | 61% | 53% |
+| Real fixes confirmed | 66% | 96% |
+| Real fixes rejected | 9% | 4% |
+| No answer (Unproven or unsure) | 28% | 1% |
+
+$6.77 for all checks at list prices, $0.005 median per check. Two fixes came out of the misses: patches with
+image files now apply, and real fixes refuted by a doubtful test fell from 7 to 2 on a replay. Full write-up,
+per-repository numbers and every miss: [eval/RESULTS.md](eval/RESULTS.md),
+[every row and trace on LangSmith](https://smith.langchain.com/public/aa3e7194-fe49-4c5a-8438-60dbb615a081/d) and
+[the Results page](https://receipts-frontend-six.vercel.app/results). Run it: `python scripts/eval_run.py --mode receipts`.
+
+### Optimizations
+
 Measured on real services; the six demo cases are the live demo's real fix, empty patch and wrong patch for two
 SWE-bench Verified issues (xarray 4629, requests 1142).
 

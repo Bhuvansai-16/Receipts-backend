@@ -6,6 +6,7 @@ label the patches (fixed or not); Receipts never sees them.
 import asyncio
 import hashlib
 import json
+import math
 import re
 from collections import defaultdict
 from collections.abc import Callable
@@ -201,7 +202,7 @@ def report(rows: list[dict]) -> dict:
 
 
 def _pct(x: float) -> str:
-    return f"{round(x * 100)}%"
+    return f"{math.floor(x * 100 + 0.5)}%"  # half up, as the Results page rounds
 
 
 def markdown(rep: dict, links: dict) -> str:

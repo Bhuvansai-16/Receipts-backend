@@ -9,6 +9,7 @@ answers from its LangSmith experiment.
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -21,6 +22,28 @@ from receipts import config, evaluation  # noqa: E402
 
 DATASET = "receipts-swebench-verified"
 SITE = "https://receipts-frontend-six.vercel.app"
+# What the baseline's misses changed, each measured where it applies (see the ledger for the runs)
+CHANGES = [
+    {"change": "Apply a PR's text changes when it also adds binary files without data (images)", "commit": "c04adda",
+     "measured": "the 7 patches with image files, re-run (experiment receipts-545c8189)",
+     "before": "7 Unproven: patch didn't apply",
+     "after": "2 real fixes Proven, 2 wrong patches caught, 2 Unproven, 1 wrong patch passed"},
+    {"change": "Second opinion before Refuted: asks whether the failure is the bug (not an environment error) and "
+               "whether the test checks observable behaviour; asked 3 times, any doubt keeps it Unproven",
+     "commit": "aa610a8", "measured": "replayed on every baseline check that reached it (scripts/eval_judge_replay.py)",
+     "before": "7 real fixes refuted, 58 wrong patches refuted",
+     "after": "2 real fixes refuted, 51 wrong patches refuted (5 of the 7 lost were tests crashing on an "
+              "environment error that refuted the real fixes too)"},
+]
+NOTE = ("One baseline check (psf__requests-1724 with an agent patch) hung for over 20 minutes and was stopped; "
+        "the tables cover the other 199.")
+
+
+def changes_md() -> str:
+    rows = [f"| {c['change']} ({c['commit']}) | {c['measured']} | {c['before']} | {c['after']} |" for c in CHANGES]
+    return "\n".join(["", "## What the eval changed", "", "The tables above are the baseline. Each fix below came "
+                      "from its misses and was measured where it applies:", "",
+                      "| Change | Measured on | Before | After |", "|---|---|---|---|", *rows, "", NOTE, ""])
 
 
 def _key(inputs: dict) -> tuple:
@@ -46,14 +69,21 @@ def rows_for(receipts_exp: str, reader_exp: str | None, client: Client) -> list[
     return rows
 
 
-def scan(client: Client, experiments: list[str]) -> list[str]:
-    """Every run of the experiments (traces included), checked for secrets; returns what was found, never values."""
-    values = [v for v in dotenv_values(config.ROOT / ".env").values() if v]
+def scan(client: Client, receipts_dir: Path) -> list[str]:
+    """Every run of every experiment on the dataset (sharing it shares them all, traces included) and every
+    receipt to be imported, checked for secrets; returns what was found, never values."""
+    values = [v for k, v in dotenv_values(config.ROOT / ".env").items()
+              if v and not k.upper().endswith("_PATH")
+              and re.search(r"KEY|TOKEN|SECRET|PASSWORD|PRIVATE|DATABASE_URL|DSN", k.upper())]
     found = []
-    for exp in experiments:
-        for run in client.list_runs(project_name=exp):
+    for project in client.list_projects(reference_dataset_name=DATASET):
+        n = 0
+        for n, run in enumerate(client.list_runs(project_name=project.name), 1):
             text = json.dumps([run.inputs, run.outputs, run.error], default=str)
-            found += [f"{exp}: {kind}" for kind in evaluation.find_secrets(text, values)]
+            found += [f"{project.name}: {kind}" for kind in evaluation.find_secrets(text, values)]
+        print(f"scanned {project.name}: {n} runs", flush=True)
+    for path in receipts_dir.glob("*.json"):
+        found += [f"{path.name}: {kind}" for kind in evaluation.find_secrets(path.read_text(encoding="utf-8"), values)]
     return sorted(set(found))
 
 
@@ -68,15 +98,16 @@ def main() -> None:
     rep = evaluation.report([r for r in rows if r["verdict"] is not None or r["reason"]])
     links = {"site": SITE}
     if args.share:
-        findings = scan(client, [e for e in (args.receipts, args.reader) if e])
+        findings = scan(client, config.ROOT / "runs" / "eval" / args.receipts)
         if findings:
             sys.exit("not shared, secrets found: " + "; ".join(findings))
         share = client.share_dataset(dataset_name=DATASET)
         links["dataset"] = f"https://smith.langchain.com/public/{share['share_token']}/d"
     out = config.ROOT / "eval"
-    (out / "results.json").write_text(json.dumps({**rep, "links": links, "experiments": {
-        "receipts": args.receipts, "reader": args.reader}}, indent=1, default=str), encoding="utf-8")
-    (out / "RESULTS.md").write_text(evaluation.markdown(rep, links), encoding="utf-8")
+    (out / "results.json").write_text(json.dumps({**rep, "links": links, "changes": CHANGES, "note": NOTE,
+                                                  "experiments": {"receipts": args.receipts, "reader": args.reader}},
+                                                 indent=1, default=str), encoding="utf-8")
+    (out / "RESULTS.md").write_text(evaluation.markdown(rep, links) + changes_md(), encoding="utf-8")
     print(json.dumps({"receipts": rep["receipts"], "reader": rep["reader"], "cost_usd": rep["cost_usd"],
                       "seconds_median": rep["seconds_median"], "misses": len(rep["misses"]),
                       "unproven_reasons": rep["unproven_reasons"], "links": links}, indent=1))
