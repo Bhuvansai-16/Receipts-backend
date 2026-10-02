@@ -8,8 +8,7 @@ MVP: fix engine on SWE-bench Verified, as a CLI and an API (UI in the `receipts-
 ## Setup (global Python, no venv)
 
 ```bash
-pip install contree-sdk "contree-client[httpx]" deepagents langchain-openai langchain-tavily langsmith datasets python-dotenv \
-    fastapi uvicorn sse-starlette "psycopg[binary]" psycopg-pool httpx
+pip install -r requirements.txt
 cp .env.example .env   # fill in keys
 python -m receipts smoke --instance psf__requests-1142
 ```

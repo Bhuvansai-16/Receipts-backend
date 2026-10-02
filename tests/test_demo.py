@@ -120,3 +120,18 @@ def test_the_gallery_shows_finished_demo_receipts_only(api):
 
     asyncio.run(seed())
     assert [r["id"] for r in api.get("/api/demo").json()["gallery"]] == ["d-done"]
+
+
+def test_the_demo_overview_asks_the_database_once(api, monkeypatch):
+    calls = []
+    store = api.store
+    for name in ("usage", "list_for_user"):
+        real = getattr(store, name)
+
+        async def counted(*a, _real=real, _name=name, **k):
+            calls.append(_name)
+            return await _real(*a, **k)
+
+        monkeypatch.setattr(store, name, counted)
+    assert api.get("/api/demo").json()["left_today"] == config.DEMO_RUNS_PER_DAY
+    assert calls == ["list_for_user"]

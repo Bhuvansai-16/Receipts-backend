@@ -61,8 +61,10 @@ def _since() -> datetime:
 
 @router.get("")
 async def overview(runs=Depends(_runs)) -> dict:
-    _, today = await runs.usage(DEMO_USER, _since())
-    recent = await runs.list_for_user(DEMO_USER, 50)
+    # One query: today's demo runs are among the latest max(50, cap), since the cap counts 24 hours.
+    since = _since()
+    recent = await runs.list_for_user(DEMO_USER, max(50, config.DEMO_RUNS_PER_DAY))
+    today = sum(r["started_at"] >= since for r in recent)
     return {"cases": [{k: c[k] for k in PUBLIC_KEYS} for c in cases()], "live": live_run(),
             "gallery": [r for r in recent if r["status"] == "done"][:GALLERY_SIZE],
             "left_today": max(0, config.DEMO_RUNS_PER_DAY - today)}

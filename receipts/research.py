@@ -84,20 +84,29 @@ async def research(repo: str, issue: str, search=None) -> Brief:
     brief = Brief(queries=[f"{library} {name}" for name in api_names(issue, library)])
     if not brief.queries:
         return brief
-    notes = []
-    for query in brief.queries:
-        try:  # no key, no results, quota, timeout: the writer works without this part, as it always did
-            if search is None:
-                from langchain_tavily import TavilySearch
+    try:
+        if search is None:
+            from langchain_tavily import TavilySearch
 
-                search = TavilySearch(max_results=3, exclude_domains=CODE_HOSTS,
-                                      include_domains=[DOCS[library]] if library in DOCS else DOC_DOMAINS)
+            search = TavilySearch(max_results=3, exclude_domains=CODE_HOSTS,
+                                  include_domains=[DOCS[library]] if library in DOCS else DOC_DOMAINS)
+    except Exception as e:  # no key: the writer works without docs, as it always did (one error per query)
+        brief.errors += [f"{q}: {type(e).__name__}: {e}"[:300] for q in brief.queries]
+        log.warning("research search unavailable: %s", e)
+        return brief
+
+    async def one(query: str) -> dict:
+        try:  # no results, quota, timeout: the writer works without this part
             found = await asyncio.wait_for(search.ainvoke({"query": query}), SEARCH_TIMEOUT_S)
+            return found if isinstance(found, dict) else {}
         except Exception as e:
             brief.errors.append(f"{query}: {type(e).__name__}: {e}"[:300])
             log.warning("research search failed: %s", brief.errors[-1])
-            continue
-        for item in found.get("results", []) if isinstance(found, dict) else []:
+            return {}
+
+    notes = []
+    for found in await asyncio.gather(*(one(q) for q in brief.queries)):  # results stay in query order
+        for item in found.get("results", []):
             url = item.get("url") or ""
             if _allowed(url) and url not in {s["url"] for s in brief.sources}:
                 brief.sources.append({"title": item.get("title") or url, "url": url})

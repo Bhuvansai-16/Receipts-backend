@@ -17,11 +17,12 @@ class FakeSearch:
 
     async def ainvoke(self, args):
         self.queries.append(args["query"])
+        n = len(self.queries)  # numbered before awaiting: the searches run at the same time
         await asyncio.sleep(self.delay)
         if self.fail:
             raise RuntimeError("tavily down")
         return {"results": self.results if self.results is not None else [
-            {"title": "Sorting", "url": f"https://docs.sympy.org/{len(self.queries)}",
+            {"title": "Sorting", "url": f"https://docs.sympy.org/{n}",
              "content": "default_sort_key(item, order=None) returns a key ..."}]}
 
 
@@ -109,3 +110,19 @@ def test_the_writer_gets_the_docs_text_without_links():
     # A docs page links to its source on a code host; the writer gets the text, the receipt lists the links.
     brief = asyncio.run(research.research("a/sympy", ISSUE_2, FakeSearch()))
     assert "default_sort_key(item" in brief.for_writer() and "http" not in brief.for_writer()
+
+
+def test_the_two_searches_run_at_the_same_time():
+    started, both = [], asyncio.Event()
+
+    class Search:
+        async def ainvoke(self, args):
+            started.append(args["query"])
+            if len(started) == 2:
+                both.set()
+            await asyncio.wait_for(both.wait(), 1)  # one at a time would time out here
+            return {"results": []}
+
+    issue = "```python\nsimplify(nsimplify(x))\n```"
+    brief = asyncio.run(research.research("sympy/sympy", issue, search=Search()))
+    assert len(started) == 2 and brief.errors == []
