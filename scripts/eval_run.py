@@ -89,6 +89,7 @@ async def main() -> None:
     ap.add_argument("--mode", choices=["receipts", "reader"], required=True)
     ap.add_argument("--limit", type=int, help="only the first N issues")
     ap.add_argument("--resume", help="an experiment name to finish")
+    ap.add_argument("--only", nargs="+", help="only these cases, by run id (a fix measured where it applies)")
     ap.add_argument("--concurrency", type=int, default=4)
     args = ap.parse_args()
     client = Client()
@@ -103,6 +104,9 @@ async def main() -> None:
     if args.limit:
         keep = sorted(order, key=order.get)[:args.limit]
         examples = [e for e in examples if e.inputs["instance_id"] in keep]
+    if args.only:
+        keep = set(args.only)
+        examples = [e for e in examples if evaluation.case_of(e.inputs).run_id in keep]
     if args.resume:
         done = {r.reference_example_id for r in client.list_runs(project_name=args.resume, is_root=True)}
         examples = [e for e in examples if e.id not in done]
