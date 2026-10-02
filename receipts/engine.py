@@ -111,17 +111,40 @@ async def classify(issue: str, patch: str) -> Claim:
     return majority(list(await asyncio.gather(*(llm.ainvoke(claim_prompt(issue, patch)) for _ in range(3)))))
 
 
-@traceable(name="second_opinion")
-async def judge(issue: str, test_code: str, base_output: str) -> Judgement:
-    prompt = (
+def judge_prompt(issue: str, test_code: str, base_output: str) -> str:
+    # Eval baseline: 7 of 200 real fixes were refuted by tests this check passed. Some failed on an unrelated
+    # environment error (pylint #4970, #6386), others asserted an internal detail (matplotlib #23314:
+    # ax.patch visibility, where the fix skips drawing) or a parameter name the issue never fixed.
+    return (
         "A pull request claims to fix the issue below. A test written from the issue alone still fails on the PR "
         "exactly as it fails on the unpatched code. Before we tell the contributor their PR does not fix the "
-        "issue, check the test itself. Answer faithful=true ONLY if the test asserts exactly the behaviour the "
-        "issue asks for, with no extra or stricter expectations and no mistakes of its own. If in doubt, false.\n\n"
+        "issue, check the test itself. Answer faithful=true ONLY if all of these hold:\n"
+        "1. The failure on unpatched code shows the bug the issue reports. Not an unrelated error: a broken "
+        "environment, a missing dependency or plugin, a crash before the behaviour is checked.\n"
+        "2. The test checks the behaviour the issue asks for through what a user can observe. Not an internal "
+        "detail (a private attribute, a helper object's state) or a name or signature the issue does not fix, "
+        "which a correct fix could do differently.\n"
+        "3. No extra or stricter expectations than the issue, and no mistakes of its own.\n"
+        "If in doubt, false.\n\n"
         f"Issue:\n{issue[:8000]}\n\nTest:\n```python\n{test_code}\n```\n\n"
         f"Failure on unpatched code:\n{base_output[-3000:]}"
     )
-    return await config.llm("judge").with_structured_output(Judgement, method="function_calling").ainvoke(prompt)
+
+
+def unanimous(answers: list[Judgement | None]) -> Judgement:
+    """The first doubt, or the trust all answers share. A split is doubt: UNPROVEN, never REFUTED."""
+    for a in answers:
+        if a is None or not a.faithful:
+            return a or Judgement(faithful=False, reason="the second opinion gave no answer")
+    return answers[0]
+
+
+@traceable(name="second_opinion")
+async def judge(issue: str, test_code: str, base_output: str) -> Judgement:
+    # Asked 3 times: one answer flipped either way on replays of the same evidence (eval baseline)
+    llm = config.llm("judge").with_structured_output(Judgement, method="function_calling")
+    prompt = judge_prompt(issue, test_code, base_output)
+    return unanimous(list(await asyncio.gather(*(llm.ainvoke(prompt) for _ in range(3)))))
 
 
 @traceable(name="second_opinion_mixed")
