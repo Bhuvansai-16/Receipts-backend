@@ -7,6 +7,9 @@ import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel
 
 GOLD_URL = "swebench:gold"
 NONE_URL = "none"
@@ -88,3 +91,43 @@ def interleave(cases: list[Case]) -> list[Case]:
             if q:
                 out.append(q.pop(0))
     return out
+
+
+CAUGHT = {"REFUTED", "REGRESSION"}
+NOT_CHECKED = {"UNPROVEN", "NO_CHECKABLE_CLAIM", None}
+DIFF_LIMIT = 30_000
+
+
+def row_scores(fixed: bool, verdict: str | None) -> dict[str, int]:
+    """Feedback for one checked patch; each truth class gets only its own keys, so averages are the rates."""
+    unproven = int(verdict in NOT_CHECKED)
+    if fixed:
+        return {"proven_fix": int(verdict == "PROVEN"), "false_refuted": int(verdict == "REFUTED"), "unproven": unproven}
+    return {"caught": int(verdict in CAUGHT), "false_proven": int(verdict == "PROVEN"), "unproven": unproven}
+
+
+def reader_scores(fixed: bool, answer: str) -> dict[str, int]:
+    """The same for a reviewer that only reads the issue and the diff."""
+    unsure = int(answer not in ("fixed", "not_fixed"))
+    if fixed:
+        return {"accepted_fix": int(answer == "fixed"), "false_reject": int(answer == "not_fixed"), "unsure": unsure}
+    return {"rejected_wrong": int(answer == "not_fixed"), "false_accept": int(answer == "fixed"), "unsure": unsure}
+
+
+def summary(rows: list[dict], keys) -> dict[str, float]:
+    out = {}
+    for k in keys:
+        vals = [r[k] for r in rows if k in r]
+        out[k] = round(sum(vals) / len(vals), 4) if vals else 0.0
+    return out
+
+
+class ReaderAnswer(BaseModel):
+    answer: Literal["fixed", "not_fixed", "unsure"]
+    reason: str
+
+
+def reader_prompt(issue: str, diff: str) -> str:
+    return ("You review a pull request. Read the issue and the diff, and say whether the diff fixes the issue as "
+            "described: fixed, not_fixed, or unsure. Give the reason in one or two sentences.\n\n"
+            f"Issue:\n{issue[:8000]}\n\nDiff:\n{diff[:DIFF_LIMIT - 9000]}")
