@@ -124,19 +124,6 @@ def test_report_scores_receipts_and_the_reader_and_lists_the_misses():
     assert E._pct(0.005) == "1%" and E._pct(0.6083) == "61%"  # half up, as the Results page rounds
 
 
-def test_races_group_an_issues_patches_in_dataset_order_with_readable_names():
-    rows = [_row("o/r", True, "PROVEN", "fixed", kind="gold"), _row("o/r", False, None, None, kind="none"),
-            {**_row("o/r", False, "REFUTED", "not_fixed"), "agent": "20241028_agentless-1.5_gpt4o"},
-            {**_row("o/r", True, "PROVEN", "fixed", kind="right"), "agent": "someone_new"}]
-    [race] = E.races(rows, {"o/r-1": "Title"})
-    assert race["instance_id"] == "o/r-1" and race["title"] == "Title" and race["repo"] == "o/r"
-    assert [p["name"] for p in race["patches"]] == ["the real fix", "an empty patch", "Agentless 1.5 (GPT-4o)",
-                                                    "someone_new"]
-    assert race["patches"][1]["verdict"] is None and race["patches"][2]["reader"] == "not_fixed"
-    assert set(race["patches"][0]) == {"run_id", "kind", "agent", "name", "fixed", "verdict", "reader", "cost_usd",
-                                       "reused"}
-
-
 def test_find_secrets_names_what_it_found_without_repeating_it():
     assert E.find_secrets("clean text with a sk- prefix but nothing more", ["supersecretvalue"]) == []
     found = E.find_secrets("token supersecretvalue and ghp_" + "a" * 36, ["supersecretvalue"])

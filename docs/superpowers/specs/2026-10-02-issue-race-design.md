@@ -4,6 +4,9 @@ Date: 2 October 2026. Sub-project 3 of the Phase 2 plan (after judge-ready repos
 before public pull requests by URL and the MCP server). Status: approved in conversation, then cut to browsing
 only ("do this if it's really useful"): the live re-run is dropped, see Out of scope.
 
+Removed 3 October 2026: the Results and Races pages were more detail than a visitor needs. The landing page shows
+the comparison table and links to `eval/RESULTS.md`; `eval/races.json` and the code that wrote it are gone.
+
 ## Goal
 
 For one issue, show which competing patches really fix it. The race is the 40 evaluation issues, each with its
