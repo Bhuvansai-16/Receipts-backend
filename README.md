@@ -138,7 +138,7 @@ $6.77 for all checks at list prices, $0.005 median per check. Two fixes came out
 image files now apply, and real fixes refuted by a doubtful test fell from 7 to 2 on a replay. Full write-up,
 per-repository numbers and every miss: [eval/RESULTS.md](eval/RESULTS.md),
 [every row and trace on LangSmith](https://smith.langchain.com/public/aa3e7194-fe49-4c5a-8438-60dbb615a081/d) and
-[the Results page](https://receipts-frontend-six.vercel.app/results). Run it: `python scripts/eval_run.py --mode receipts`.
+[the comparison on the site](https://receipts-frontend-six.vercel.app/). Run it: `python scripts/eval_run.py --mode receipts`.
 
 ### Optimizations
 

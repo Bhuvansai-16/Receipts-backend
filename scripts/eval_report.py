@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import dotenv_values  # noqa: E402
 from langsmith import Client  # noqa: E402
 
-from receipts import config, evaluation, swebench  # noqa: E402
+from receipts import config, evaluation  # noqa: E402
 
 DATASET = "receipts-swebench-verified"
 SITE = "https://receipts-frontend-six.vercel.app"
@@ -105,10 +105,6 @@ def main() -> None:
             sys.exit("not shared, secrets found: " + "; ".join(findings))
         share = client.share_dataset(dataset_name=DATASET)
         links["dataset"] = f"https://smith.langchain.com/public/{share['share_token']}/d"
-    titles = {iid: swebench.load_instance(iid).problem_statement.strip().splitlines()[0][:120]
-              for iid in {r["instance_id"] for r in rows}}
-    (out / "races.json").write_text(json.dumps(evaluation.races(rows, titles), indent=1, default=str),
-                                    encoding="utf-8")
     (out / "results.json").write_text(json.dumps({**rep, "links": links, "changes": CHANGES, "note": NOTE,
                                                   "experiments": {"receipts": args.receipts, "reader": args.reader}},
                                                  indent=1, default=str), encoding="utf-8")

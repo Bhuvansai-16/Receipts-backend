@@ -22,7 +22,7 @@ PR = {"number": 12, "title": "Fix crash", "body": "Fixes #3", "user": {"login": 
 @pytest.fixture
 def gh(monkeypatch):
     """Neon Auth and GitHub behind one mock transport, plus a fake engine and PR target."""
-    fake = SimpleNamespace(calls=[], github_linked=True,
+    fake = SimpleNamespace(calls=[], github_linked=True, pulls=[PR],
                            installations=[{"id": 7, "app_id": 123, "account": {"login": "octo", "type": "User"}}])
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -37,7 +37,7 @@ def gh(monkeypatch):
             "/user/installations": (200, {"installations": fake.installations}),
             "/app/installations/7/access_tokens": (201, {"token": "ghs_x", "expires_at": "2099-01-01T00:00:00Z"}),
             "/installation/repositories": (200, {"repositories": [REPO]}),
-            "/repos/octo/hello/pulls": (200, [PR]),
+            "/repos/octo/hello/pulls": (200, fake.pulls),
             "/repos/octo/hello/pulls/12": (200, PR),
             "/repos/octo/hello/check-runs": (201, {"id": 555}),
             "/repos/octo/hello/check-runs/555": (200, {"id": 555}),
@@ -255,3 +255,50 @@ def test_auto_checks_only_for_allowed_accounts(client, monkeypatch):
     monkeypatch.setattr(config, "ALLOWED_GITHUB_ACCOUNTS", {"octo"})
     webhook(client, event, delivery="a2")
     assert len(client.store.rows) == 1
+
+
+def _pr(number, head="h", draft=False):
+    return {**PR, "number": number, "draft": draft, "head": {"sha": head},
+            "html_url": f"https://github.com/octo/hello/pull/{number}"}
+
+
+def test_unchecked_skips_drafts_and_prs_checked_at_their_head():
+    prs = [_pr(1), _pr(2, draft=True), _pr(3, "new"), _pr(4), _pr(5), _pr(6)]
+    latest = {3: {"head_sha": "old", "status": "done"}, 4: {"head_sha": "h", "status": "done"},
+              5: {"head_sha": "h", "status": "running"}, 6: {"head_sha": "h", "status": "error"}}
+    assert [p["number"] for p in github.unchecked(prs, latest)] == [1, 3, 6]
+
+
+def test_check_all_runs_unchecked_prs_one_after_another(client, gh, monkeypatch):
+    import asyncio
+    spans = []
+
+    async def slow_check(target, patch, emit=None, **kw):
+        spans.append(("start", target.instance_id))
+        await asyncio.sleep(0.05)
+        spans.append(("end", target.instance_id))
+        return {"instance_id": target.instance_id, "repo": target.repo, "verdict": "PROVEN", "reason": "r",
+                "seconds": 1.0, "tokens": {}}
+
+    monkeypatch.setattr(engine, "check", slow_check)
+    gh.pulls = [_pr(12), _pr(13, draft=True), _pr(14)]
+    signed_in(client).post("/api/github/installations/sync")
+    r = client.post("/api/github/repos/octo/hello/check-all")
+    assert r.status_code == 202 and r.json()["left"] == 0
+    first, second = r.json()["run_ids"]
+    assert wait_for(client, second)["status"] == "done" and wait_for(client, first)["status"] == "done"
+    assert [s[0] for s in spans] == ["start", "end", "start", "end"]
+    assert [s[1] for s in spans[::2]] == ["octo/hello#12", "octo/hello#14"]
+    latest = client.get("/api/github/repos/octo/hello/pulls").json()["pulls"][0]["latest"]
+    assert latest["head_sha"] == "h"
+    assert client.post("/api/github/repos/octo/hello/check-all").status_code == 409  # nothing left to check
+
+
+def test_check_all_stops_at_the_daily_limit(client, gh, monkeypatch):
+    gh.pulls = [_pr(12), _pr(14)]
+    signed_in(client).post("/api/github/installations/sync")
+    monkeypatch.setattr(config, "RUNS_PER_DAY", 1)
+    r = client.post("/api/github/repos/octo/hello/check-all").json()
+    assert len(r["run_ids"]) == 1 and r["left"] == 1
+    wait_for(client, r["run_ids"][0])
+    assert client.post("/api/github/repos/octo/hello/check-all").status_code == 429
