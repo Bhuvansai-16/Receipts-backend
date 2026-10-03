@@ -57,8 +57,8 @@ flowchart TD
 5. **Runs.** The accepted test runs three times on the original code and three times with the pull request,
    each in its own forked sandbox, together with the repository's existing tests.
 6. **Verdict.** Plain rules, no model, decide the verdict from the runs. Before a pull request is called
-   Refuted, Nemotron Ultra checks that the test matches the issue; if it doubts the test, the verdict is
-   Unproven.
+   Refuted, Nemotron Ultra is asked three times whether the test matches the issue; if any answer doubts it, the
+   verdict is Unproven.
 7. **Receipt.** The verdict, the test, every run's output and every command the agent ran, on a public page and
    as a check on the pull request.
 
