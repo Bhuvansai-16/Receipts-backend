@@ -70,6 +70,11 @@ def main() -> None:
     ie = sub.add_parser("import-eval", help="publish an evaluation's receipts (owner 'eval', in no gallery)")
     ie.add_argument("eval_dir", help="runs/eval/<experiment>")
     a = ap.parse_args()
+    if a.cmd in ("smoke", "run"):
+        missing = [k for k in ("NEBIUS_API_KEY", "CONTREE_PROJECT") if not os.environ.get(k)]
+        if missing:
+            sys.exit(f"error: set {' and '.join(missing)} in .env first: your Token Factory API key and Sandboxes "
+                     "project (see the README's Run it yourself)")
     if a.cmd == "smoke":
         return asyncio.run(smoke(a.instance))
     if a.cmd in ("migrate", "import-runs", "import-eval"):

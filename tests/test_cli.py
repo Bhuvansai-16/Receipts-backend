@@ -24,6 +24,15 @@ def test_db_commands_need_a_database_url(monkeypatch):
         cli.main()
 
 
+@pytest.mark.parametrize("argv", [["run", "psf__requests-1142"], ["smoke"]])
+def test_checks_need_the_two_nebius_settings(monkeypatch, argv):
+    monkeypatch.delenv("NEBIUS_API_KEY", raising=False)
+    monkeypatch.setenv("CONTREE_PROJECT", "p")
+    monkeypatch.setattr(sys, "argv", ["receipts", *argv])
+    with pytest.raises(SystemExit, match="NEBIUS_API_KEY"):
+        cli.main()
+
+
 def test_migrate_uses_the_direct_connection(monkeypatch, capsys):
     seen = []
 
