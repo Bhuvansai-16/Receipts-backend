@@ -195,7 +195,7 @@ def test_uninstall_removes_the_installation(client):
 
 def test_me_reports_usage(client):
     assert signed_in(client).get("/api/me").json()["usage"] == {"active": 0, "today": 0, "max_active": 2,
-                                                                  "per_day": 20}
+                                                                  "per_day": 5}
 
 
 def test_a_running_pr_check_already_names_its_pull_request(client):
