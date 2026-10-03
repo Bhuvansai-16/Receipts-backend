@@ -96,7 +96,7 @@ class MemoryRuns:
         latest = {}
         for r in sorted(self.rows.values(), key=lambda r: r["started_at"]):
             if r["repo"] == repo and r["pr_number"] in numbers:
-                latest[r["pr_number"]] = {k: r[k] for k in ("id", "status", "verdict")}
+                latest[r["pr_number"]] = {k: r[k] for k in ("id", "status", "verdict", "head_sha")}
         return latest
 
     async def sync_installations(self, user_id, installations):
@@ -216,10 +216,10 @@ class PgRuns:
         return row is not None
 
     async def latest_for_prs(self, repo, numbers):
-        rows = await self._all("SELECT DISTINCT ON (pr_number) pr_number, id, status, verdict FROM runs "
+        rows = await self._all("SELECT DISTINCT ON (pr_number) pr_number, id, status, verdict, head_sha FROM runs "
                                "WHERE repo = %s AND pr_number = ANY(%s) ORDER BY pr_number, started_at DESC",
                                (repo, list(numbers)))
-        return {r["pr_number"]: {k: r[k] for k in ("id", "status", "verdict")} for r in rows}
+        return {r["pr_number"]: {k: r[k] for k in ("id", "status", "verdict", "head_sha")} for r in rows}
 
     async def sync_installations(self, user_id, installations):
         for i in installations:

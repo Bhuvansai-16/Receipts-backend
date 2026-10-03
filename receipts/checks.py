@@ -45,7 +45,8 @@ async def usage(runs, user_id) -> tuple[int, int]:
     return await runs.usage(user_id, datetime.now(timezone.utc) - timedelta(days=1))
 
 
-async def enforce_limits(runs, user_id) -> None:
+async def room(runs, user_id) -> int:
+    """How many checks the user may still start today (their daily and the global cap), or 429 with the reason."""
     # ponytail: check-then-insert; two simultaneous starts can both pass. Fine for a cost guard.
     since = datetime.now(timezone.utc) - timedelta(days=1)
     active, recent = await runs.usage(user_id, since)
@@ -53,18 +54,26 @@ async def enforce_limits(runs, user_id) -> None:
         raise HTTPException(429, f"You already have {active} checks running. Start another when one finishes.")
     if recent >= config.RUNS_PER_DAY:
         raise HTTPException(429, f"Daily limit reached ({config.RUNS_PER_DAY} checks in 24 hours). Try again later.")
-    if await runs.global_recent(since) >= config.GLOBAL_RUNS_PER_DAY:
+    everyone = await runs.global_recent(since)
+    if everyone >= config.GLOBAL_RUNS_PER_DAY:
         raise HTTPException(429, "Receipts has reached today's check limit for everyone. Try again tomorrow.")
+    return min(config.RUNS_PER_DAY - recent, config.GLOBAL_RUNS_PER_DAY - everyone)
+
+
+async def enforce_limits(runs, user_id) -> None:
+    await room(runs, user_id)
 
 
 async def launch(runs, user_id, run_id, instance_id, pr_kind, prepare, *, source=None, on_start=None,
-                 on_finish=None) -> str:
+                 on_finish=None, after: asyncio.Task | None = None) -> str:
     """Store the run as queued and start it. `prepare()` returns (target, patch) inside the task, so slow
-    downloads and environment setup show up as progress instead of blocking the request."""
+    downloads and environment setup show up as progress instead of blocking the request. With `after`, the run
+    waits (queued) until that task ends: a batch runs one check at a time."""
     await runs.create(run_id, user_id, instance_id, pr_kind, source=source and {
         k: source[k] for k in ("repo", "pr_number", "head_sha")})
     live = LIVE[run_id] = LiveRun(run_id, user_id, source)
-    task = live.task = asyncio.create_task(_execute(live, instance_id, prepare, runs, source, on_start, on_finish))
+    task = live.task = asyncio.create_task(_execute(live, instance_id, prepare, runs, source, on_start, on_finish,
+                                                    after))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return run_id
@@ -79,11 +88,13 @@ def cancel(run_id: str, user_id: str) -> bool:
     return True
 
 
-async def _execute(live, instance_id, prepare, runs, source, on_start, on_finish) -> None:
+async def _execute(live, instance_id, prepare, runs, source, on_start, on_finish, after=None) -> None:
     global _slots
     _slots = _slots or asyncio.Semaphore(MAX_CONCURRENT_CHECKS)
     status, evidence = "error", {"instance_id": instance_id, "reason": "the check failed to run"}
     try:
+        if after is not None:  # a batch leaves the server's other sandbox slot to everyone else
+            await asyncio.wait([after])
         async with _slots:
             await runs.mark_running(live.id)
             live.publish("status", {"status": "running"})

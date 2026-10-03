@@ -149,7 +149,7 @@ async def pulls(owner: str, name: str, user: dict = Depends(auth.current_user), 
         "latest": latest.get(p["number"])} for p in prs]}
 
 
-async def start_pr_check(runs, user_id: str, repo: dict, pr: dict) -> str:
+async def start_pr_check(runs, user_id: str, repo: dict, pr: dict, after=None) -> str:
     """Run a check on a PR (GitHub's pull request object) and mirror it into a 'Receipts' check run."""
     full, repo_id, inst = repo["full_name"], repo["id"], repo["installation_id"]
     number, head_sha = pr["number"], pr["head"]["sha"]
@@ -175,7 +175,7 @@ async def start_pr_check(runs, user_id: str, repo: dict, pr: dict) -> str:
     source = {"repo": full, "pr_number": number, "head_sha": head_sha, "url": pr["html_url"],
               "title": pr.get("title"), "linked_issue": targets.linked_issue(pr.get("body"))}
     return await checks.launch(runs, user_id, run_id, f"{full}#{number}", "github", prepare, source=source,
-                               on_start=on_start, on_finish=on_finish)
+                               on_start=on_start, on_finish=on_finish, after=after)
 
 
 @router.post("/repos/{owner}/{name}/pulls/{number}/check", status_code=202)
@@ -192,6 +192,33 @@ async def check_pull(owner: str, name: str, number: int, user: dict = Depends(au
     if pr.get("state") != "open":
         raise HTTPException(409, "Only open pull requests can be checked.")
     return {"run_id": await start_pr_check(runs, user["id"], repo, pr)}
+
+
+def unchecked(prs: list[dict], latest: dict) -> list[dict]:
+    """Open non-draft PRs with no receipt, and no check under way, for their current head commit."""
+    def covered(pr):
+        last = latest.get(pr["number"])
+        return bool(last) and last.get("head_sha") == pr["head"]["sha"] and last["status"] != "error"
+    return [p for p in prs if not p.get("draft") and not covered(p)]
+
+
+@router.post("/repos/{owner}/{name}/check-all", status_code=202)
+async def check_all(owner: str, name: str, user: dict = Depends(auth.current_user), runs=Depends(_runs)) -> dict:
+    """Check every unchecked open PR, one after another, up to the user's remaining checks for today."""
+    repo = await _find_repo(user, runs, full_name=f"{owner}/{name}")
+    token = await _gh(github_app.installation_token(repo["installation_id"], repo["id"],
+                                                    {"pull_requests": "read", "metadata": "read"}))
+    prs = (await _gh(github_app.api(token, "GET", f"/repos/{repo['full_name']}/pulls",
+                                    params={"state": "open", "per_page": 30}))).json()
+    todo = unchecked(prs, await runs.latest_for_prs(repo["full_name"], [p["number"] for p in prs]))
+    if not todo:
+        raise HTTPException(409, "Every open pull request is already checked at its latest commit.")
+    room = await checks.room(runs, user["id"])
+    run_ids, previous = [], None
+    for pr in todo[:room]:
+        run_ids.append(await start_pr_check(runs, user["id"], repo, pr, after=previous))
+        previous = checks.LIVE[run_ids[-1]].task  # launch returned without yielding, so the run is still live
+    return {"run_ids": run_ids, "left": len(todo) - len(run_ids)}
 
 
 def _first_delivery(delivery: str) -> bool:
